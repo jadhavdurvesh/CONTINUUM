@@ -1,145 +1,151 @@
-PROPRIETARY SOFTWARE LICENSE AND STRICT RESTRICTED-USE TERMS
+PROPRIETARY SOFTWARE LICENSE AND RESTRICTED-USE AGREEMENT
 
 Copyright (c) 2026 DMJ Group and DMJ Labs. All rights reserved.
 
-For purposes of this license, “Rights Holder” means DMJ Group and DMJ Labs,
-collectively, to the extent each owns or controls the applicable rights.
+1. ACCEPTANCE AND SCOPE
 
-NOTICE
-These Materials are proprietary. No permission is granted to the public to use,
-copy, modify, publish, distribute, or exploit them. Access to a repository,
-including private repository access, does not by itself grant a license beyond
-the narrow permission expressly stated below.
+This Agreement governs access to and use of the software and associated
+materials in this repository, including source code, object code, designs,
+interfaces, documentation, schemas, workflows, prompts, configuration, and
+other content (collectively, the "Materials"). The owners of the applicable
+rights are referred to as the "Rights Holder."
 
-1. DEFINITIONS
-“Materials” means this repository and all source code, object code, designs,
-documentation, specifications, interfaces, workflows, schemas, prompts,
-software architecture, graphics, assets, and other content made available by
-the Rights Holder, excluding third-party components that are clearly identified
-as such and remain subject to their own licenses.
-“Authorized User” means a person who has received explicit written permission
-from the Rights Holder for a specifically described purpose and period.
-“Written Permission” means written authorization issued by a person authorized
-to act for the Rights Holder. Repository access, silence, prior dealings, or
-an automated response is not Written Permission.
+By selecting "I accept" in an installer or using the Materials under an express
+authorization, you agree to this Agreement. If you do not agree, do not install,
+access, copy, or use the Materials. Installer acceptance is a condition of
+installation, not a substitute for any additional written authorization this
+Agreement requires.
 
-2. OWNERSHIP AND RESERVATION OF RIGHTS
-All rights, title, and interest in the Materials remain with the Rights Holder
-or the respective third-party rights owners. No title or ownership is transferred.
-All rights not expressly granted in this license are reserved.
+2. OWNERSHIP AND RESERVED RIGHTS
 
-3. NARROW INTERNAL LICENSE
-Only an Authorized User may access and use the Materials, and only for the
-private internal development or evaluation purpose stated in the relevant
-Written Permission. This permission is limited, non-exclusive, non-transferable,
-non-sublicensable, purpose-limited, and revocable to the extent permitted by
-applicable law.
+The Materials are proprietary. All rights, title, and interest remain with the
+Rights Holder or the relevant third-party rights owners. No ownership is
+transferred to you. All rights not expressly granted are reserved.
 
-No general public license, open-source license, commercial license, or right to
-distribute is granted. No permission may be inferred from the availability of
-the repository or from the ability to download its contents.
+3. LIMITED INTERNAL PERMISSION
 
-4. STRICTLY PROHIBITED WITHOUT PRIOR WRITTEN PERMISSION
-To the maximum extent permitted by applicable law, no person may:
+Only a recipient expressly authorized by the Rights Holder may access, execute,
+and modify the Materials, and only for the private internal development,
+testing, and operation of the authorized project within the scope of that
+authorization. Permission is limited, non-exclusive, non-transferable,
+non-sublicensable, purpose-limited, and revocable to the extent permitted by law.
 
-(a) copy, reproduce, publish, distribute, disclose, sublicense, sell, rent,
-    lease, lend, mirror, share, or otherwise provide the Materials to any
-    unauthorized person or entity;
-(b) use, reuse, adapt, modify, translate, merge, create derivative works from,
-    or incorporate the Materials into any other software, product, service,
-    dataset, or project outside the expressly authorized purpose;
-(c) use the Materials for commercial exploitation, paid services, hosted
-    services, consulting for third parties, resale, competitive development,
-    or a competing or substitute product;
-(d) use the Materials, prompts, outputs, or non-public technical information
-    to train, fine-tune, evaluate, or improve a machine-learning model or
-    dataset, except for an expressly authorized private internal use;
-(e) publish screenshots, benchmarks, source excerpts, technical details, or
-    other non-public project information;
-(f) remove, conceal, alter, or bypass copyright notices, license terms,
-    security mechanisms, access controls, provenance, or attribution;
-(g) reverse engineer, decompile, or disassemble compiled components, except
-    to the limited extent such activity cannot lawfully be prohibited;
-(h) upload or transfer the Materials to a public repository, public paste,
-    public package registry, or third-party service in a manner that grants
-    others access, except where expressly authorized in writing;
-(i) use the Materials to violate law, infringe third-party rights, or breach
-    a confidentiality, security, or data-protection obligation; or
-(j) authorize, encourage, or assist another person to perform any prohibited
-    act listed in this section.
+Repository access, receipt of an installer, or acceptance of this Agreement
+does not grant permission to publish, distribute, sublicense, sell, or otherwise
+provide the Materials to another person. No public, open-source, or general
+commercial license is granted.
 
-5. CONTRIBUTORS, CONTRACTORS, AND AUTOMATED AGENTS
-A collaborator, contractor, service provider, or automated agent may access
-only the portions and capabilities needed for a specifically authorized task.
-The person configuring such access must use least-privilege permissions and
-must not provide credentials, secrets, or non-public Materials to unauthorized
-parties. Automated agents acquire no ownership or independent license through
-their access. Any third-party tool or model remains subject to its own terms;
-no confidential Materials should be supplied to it unless that transfer is
-authorized and appropriate safeguards are in place.
+4. PROHIBITED USES
 
-6. THIRD-PARTY COMPONENTS
-Third-party components remain governed by their respective licenses. This
-license does not replace, expand, or restrict rights granted by a third party.
-The recipient must preserve and comply with applicable third-party notices and
-licenses. The Rights Holder grants rights only to the extent it owns or controls
-the relevant Materials.
+Unless the Rights Holder first grants explicit written permission, you must not,
+to the maximum extent permitted by applicable law:
+
+(a) publish, distribute, disclose, sublicense, sell, rent, lease, lend, mirror,
+    or provide the Materials to an unauthorized person or service;
+(b) reuse, incorporate, adapt, translate, or create derivative works from the
+    Materials outside the authorized internal project purpose;
+(c) sell, license, host, commercialize, or use the Materials to provide a
+    product, service, or consultancy to a third party;
+(d) use the Materials to create a competing or substitute product, or support
+    competitive development outside the authorized internal purpose;
+(e) use the Materials, prompts, outputs, or non-public project information to
+    train, fine-tune, evaluate, or improve a machine-learning model or dataset,
+    except where specifically authorized in writing for private internal use;
+(f) remove or alter notices, provenance, access controls, security protections,
+    or license terms;
+(g) reverse engineer, decompile, or disassemble compiled portions, except to
+    the limited extent such restriction is not permitted by law;
+(h) upload Materials to a public repository, package registry, paste site, or
+    third-party system in a way that makes them available to unauthorized people;
+(i) disclose credentials, secrets, private project data, or non-public technical
+    information to unauthorized people or systems; or
+(j) assist another person in performing any prohibited act listed above.
+
+5. COLLABORATORS AND AUTOMATION
+
+A collaborator may use the Materials only within the internal scope expressly
+authorized for that collaborator. Repository membership alone is not an
+independent license to publish, distribute, or use the Materials outside that
+scope. Access must be limited to what each collaborator needs and revoked when
+no longer appropriate.
+
+An automated agent or service receives no ownership or independent license by
+being given access. Before sending Materials to a third-party model, agent, or
+service, the authorized operator must ensure the transfer is within the approved
+scope and permitted by the service terms. Do not send credentials or secrets to
+a model or agent.
+
+6. THIRD-PARTY MATERIALS
+
+Third-party libraries, assets, models, and other components remain governed by
+their respective license terms. This Agreement does not replace or restrict
+rights granted by a third party. Preserve applicable notices and comply with
+those terms. The Rights Holder grants rights only to the extent it owns or
+controls the relevant Materials.
 
 7. CONFIDENTIALITY AND SECURITY
-Unless separately authorized in writing, treat non-public Materials, credentials,
-architecture details, project data, and internal documentation as confidential.
-Do not disclose credentials or secrets in source code, prompts, logs, issues,
-public conversations, or third-party services. This section supplements, and
-does not replace, any separate valid confidentiality agreement.
+
+Unless disclosure is expressly authorized, treat non-public Materials,
+credentials, project data, architecture, and internal documentation as
+confidential. Use reasonable security measures to prevent unauthorized access,
+alteration, disclosure, or loss. This section supplements any separate valid
+confidentiality or data-protection agreement.
 
 8. TERMINATION
-Any permission granted under this license may be suspended or terminated for
-breach, subject to applicable law and any valid separate written agreement.
-Upon termination, the Authorized User must stop the use covered by the grant
-and, where legally permitted, return or delete copies under their control.
-Termination does not extinguish rights or remedies that accrued earlier.
 
-9. DISCLAIMER OF WARRANTIES
+Permission may be suspended or terminated for a material breach, subject to law
+and any separate written agreement. Upon termination, stop the use covered by
+the permission and, to the extent legally permitted, return or delete copies
+under your control. Termination does not waive previously accrued remedies.
+
+9. ENFORCEMENT AND REMEDIES
+
+Unauthorized access, copying, disclosure, distribution, or other use may
+infringe intellectual-property rights or breach applicable obligations. The
+Rights Holder may seek remedies available under applicable law, including
+injunctive or equitable relief where available, damages, and recovery of costs
+as permitted by law. Nothing here removes a remedy that law makes available or
+mandatory.
+
+10. DISCLAIMER OF WARRANTIES
+
 TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE MATERIALS ARE PROVIDED
-“AS IS” AND “AS AVAILABLE”, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+"AS IS" AND "AS AVAILABLE", WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
 EXPRESS, IMPLIED, STATUTORY, OR OTHERWISE, INCLUDING WARRANTIES OF
 MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, NON-INFRINGEMENT,
-ACCURACY, OR AVAILABILITY. NO GUARANTEE IS MADE THAT THE MATERIALS ARE SECURE,
-ERROR-FREE, OR SUITABLE FOR ANY PARTICULAR PURPOSE.
+ACCURACY, SECURITY, OR AVAILABILITY. NO WARRANTY IS MADE THAT THE MATERIALS
+WILL BE UNINTERRUPTED, ERROR-FREE, OR SUITABLE FOR YOUR REQUIREMENTS.
 
-10. LIMITATION OF LIABILITY
-TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE RIGHTS HOLDER AND
+11. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE RIGHTS HOLDER AND ITS
 CONTRIBUTORS SHALL NOT BE LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
 PUNITIVE, OR CONSEQUENTIAL DAMAGES, OR FOR LOSS OF DATA, PROFITS, GOODWILL,
-BUSINESS, OR SERVICE AVAILABILITY, ARISING FROM OR RELATING TO THE MATERIALS
-OR THIS LICENSE. NOTHING IN THIS LICENSE EXCLUDES OR LIMITS LIABILITY THAT
-CANNOT LAWFULLY BE EXCLUDED OR LIMITED.
+BUSINESS, OR SERVICE AVAILABILITY ARISING FROM OR RELATED TO THE MATERIALS OR
+THIS AGREEMENT. NOTHING HERE EXCLUDES OR LIMITS LIABILITY THAT CANNOT LAWFULLY
+BE EXCLUDED OR LIMITED.
 
-11. COMPLIANCE AND REMEDIES
-Unauthorized use may infringe intellectual-property rights or breach other
-applicable obligations. The Rights Holder reserves any remedies available
-under applicable law. No remedy stated here is intended to remove a right or
-remedy that applicable law makes mandatory.
+12. GOVERNING LAW AND JURISDICTION
 
-12. NO IMPLIED WAIVER; WRITTEN CHANGES
-Failure to enforce any provision does not constitute a waiver unless expressly
-recorded in writing by an authorized representative of the Rights Holder.
-Any additional permission, amendment, or waiver must be explicit and in writing.
+This Agreement is governed by the laws of India, without excluding mandatory
+legal protections applicable to a recipient or dispute. Courts of competent
+jurisdiction in India may hear disputes arising from this Agreement, subject
+to any mandatory jurisdictional rule under applicable law.
 
-13. GOVERNING LAW AND SEVERABILITY
-This license is subject to applicable law. No governing-law or jurisdiction
-term is intended to override mandatory legal requirements. If any provision
-is found unenforceable, it shall be limited only to the extent necessary, and
-the remaining provisions shall continue to the extent legally permitted.
+13. SEVERABILITY AND NO IMPLIED WAIVER
 
-14. REQUESTING PERMISSION
-A request must identify the Materials, intended purpose, users, duration,
-environment, and any proposed disclosure or distribution. Permission exists
-only if expressly granted in writing by an authorized representative of the
-Rights Holder.
+If a provision is held invalid or unenforceable, it shall be limited only to
+the minimum extent necessary, and the remaining provisions shall continue in
+effect to the extent permitted by law. Failure to enforce a provision is not a
+waiver unless expressly made in writing by an authorized representative.
 
-BY ACCESSING OR USING THE MATERIALS, AN AUTHORIZED USER ACKNOWLEDGES THESE
-RESTRICTED-USE TERMS. IF YOU DO NOT HAVE WRITTEN PERMISSION OR DO NOT ACCEPT
-THESE TERMS, DO NOT ACCESS OR USE THE MATERIALS.
+14. WRITTEN PERMISSION; ENTIRE AGREEMENT
+
+Any additional permission, amendment, exception, or waiver must be explicit and
+in writing from an authorized representative of the Rights Holder. A request
+should identify the Materials, intended use, users, duration, and proposed
+disclosure. Silence, repository access, or an automated response is not written
+permission. This Agreement and any separate written authorization expressly
+supplementing it govern the permissions described here.
 
 ALL RIGHTS NOT EXPRESSLY GRANTED ARE RESERVED.

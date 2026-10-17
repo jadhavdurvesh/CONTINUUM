@@ -3,85 +3,73 @@
 **AI Project Operating System**  
 *One project. Shared knowledge. Continuous progress.*
 
-CONTINUUM is a collaborative project workspace for the full lifecycle of an engineering project. It aims to connect planning, tasks, documentation, test evidence, releases, project history, and AI-agent operations.
+CONTINUUM is a cloud-synchronized project workspace for managing engineering work from requirements and planning through implementation, testing, approval, and release. Human collaborators and AI agents share project state, while permissions and resource locks control who can change protected work.
 
-## Current scaffold
+## Current implementation
 
-- **Web:** React + TypeScript + Vite starter dashboard
-- **API:** FastAPI health endpoint and API foundation
-- **Planning:** product vision, architecture, data model, security, and roadmap documentation
-- **Governance:** planned invite-only accounts, permissions, protected resources, and audit history
-- **AI workflow:** planned RELAY integration and adapters for existing coding-agent runtimes
+- React + TypeScript + Vite dashboard with a warm paper/ink visual system, terracotta, olive, and plum accents
+- Hosted Supabase Auth + PostgreSQL + Row Level Security for shared state
+- Realtime refresh for tasks, activity, locks, permission requests, agent runs, and worker status
+- Project creation, task creation, task status updates, and project activity audit events
+- Database-enforced resource locks and time-limited permission grants
+- Supabase Edge Function for invite-only project-member invitations
+- Electron desktop shell and Windows installer workflow with a license-acceptance page
+- Product, architecture, cloud deployment, security, data model, and roadmap documentation
 
-The dashboard and API are starting points, not a completed production system. Authentication, persistence, project metrics, lock enforcement, and agent orchestration still need implementation.
+Worker leases/heartbeats, the RELAY adapter, cross-runtime handoff execution, and test-runner integration still require further implementation. The dashboard marks unconfigured areas honestly rather than inventing metrics.
 
-## Design principles
+## Cloud architecture
 
-- **Persistent context:** project knowledge survives model changes, agent restarts, and conversation limits.
-- **Interchangeable agents:** connect existing coding-agent runtimes through adapters.
-- **Evidence-based progress:** completion metrics derive from recorded tasks, tests, and approvals.
-- **Accountable collaboration:** human users, agents, and automated systems have distinct identities.
-- **Enforced protection:** locks are checked by the backend, not merely represented in the UI.
-- **Local-first execution:** begin on a developer machine and add remote workers later.
-- **Budget-aware:** prioritize open-source tools and available free tiers.
+- Web dashboard: Vercel, project root apps/web
+- Shared backend: hosted Supabase Auth, PostgreSQL, RLS, and Realtime
+- Member invitations: Supabase Edge Function invite-project-member
+- Model routing: integrate the existing RELAY project through a server-side adapter
+- Coding execution: authorized local or remote worker nodes
+- Desktop app: Electron shell around the same dashboard, signing into the same cloud project
 
-## Proposed stack
+See docs/cloud-deployment.md, docs/architecture.md, and docs/security-and-permissions.md.
 
-- Frontend: React + TypeScript + Vite
-- API: Python + FastAPI
-- Shared database and authentication: Supabase Auth + PostgreSQL with Row Level Security
-- Model routing: integrate the existing RELAY project through a stable adapter
-- Agent execution: existing coding-agent runtimes behind a unified interface
-- Local execution: isolated Git worktrees and restricted/sandboxed commands
-
-## Run the starter
-
-### API
-
-Requires Python 3.11 or newer.
-
-```bash
-cd services/api
-python -m venv .venv
-# Windows PowerShell: .venv\Scripts\Activate.ps1
-# macOS/Linux: source .venv/bin/activate
-pip install -e ".[dev]"
-uvicorn app.main:app --reload --port 8000
-```
-
-API health: http://127.0.0.1:8000/api/health  
-Interactive API docs: http://127.0.0.1:8000/docs
-
-### Web dashboard
+## Run the web client locally
 
 Requires Node.js 20 or newer.
 
-```bash
-cd apps/web
-npm install
-npm run dev
-```
+    cd apps/web
+    npm install
+    cp .env.example .env.local
+    # Fill VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in .env.local
+    npm run dev
 
-Open http://localhost:5173. The dashboard will show whether the local API is reachable. It intentionally does not invent project metrics while no project data source exists.
+Open http://localhost:5173. Without cloud values the app displays the cloud-configuration guide rather than fabricated project data.
 
-## Documentation
+## Set up the shared cloud database
 
-- [Product vision](docs/product-vision.md)
-- [Architecture](docs/architecture.md)
-- [Data model](docs/data-model.md)
-- [Security and permissions](docs/security-and-permissions.md)
-- [Roadmap](docs/roadmap.md)
+Install and authenticate the Supabase CLI, link your hosted project, and apply the migration and invitation function:
+
+    supabase login
+    supabase link --project-ref YOUR_PROJECT_REF
+    supabase db push
+    supabase functions deploy invite-project-member
+
+Configure Auth email delivery and allowed redirect URLs before inviting collaborators. Keep privileged server keys in the hosted function environment only. Never add a service-role key to a VITE_ variable.
+
+## Desktop installer
+
+GitHub Actions builds the Windows installer. Run the Build desktop installers workflow manually, or push a version tag such as v0.1.0. The NSIS installer displays LICENSE and requires acceptance before installation proceeds.
+
+## Tests and CI
+
+GitHub Actions builds the dashboard and runs the API unit tests on pushes and pull requests. The installer workflow creates an artifact downloadable from its run. A successful CI build is not the same as deployment to a configured cloud project.
 
 ## Safety defaults
 
-- Public self-registration is off for the initial private workspace.
-- Never place secrets in prompts, logs, browser code, or tracked configuration files.
-- Agents cannot unlock protected resources or grant themselves permissions.
-- Human approval is required for protected changes, destructive operations, merges, and deployment.
-- Keep execution bounded by timeouts, retries, tool permissions, and usage limits.
-- Treat repository content and issue text as untrusted input.
-- Do not report a test as passed unless a recorded execution provides evidence.
+- Invitation-only authentication; no public signup flow is provided in the app
+- Browser uses only the Supabase URL and publishable key with RLS
+- Locks and role checks are enforced server-side
+- Agents cannot grant their own permissions or unlock protected resources
+- Merge, deployment, and destructive operations remain approval-gated
+- Test results must originate from recorded executions
+- Do not commit credentials or private keys
 
 ## License
 
-Use is restricted by the proprietary terms in [LICENSE](LICENSE). No open-source license is granted.
+Use is restricted by the proprietary terms in LICENSE. No open-source license is granted.
