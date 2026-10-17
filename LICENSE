@@ -1,0 +1,145 @@
+PROPRIETARY SOFTWARE LICENSE AND STRICT RESTRICTED-USE TERMS
+
+Copyright (c) 2026 DMJ Group and DMJ Labs. All rights reserved.
+
+For purposes of this license, “Rights Holder” means DMJ Group and DMJ Labs,
+collectively, to the extent each owns or controls the applicable rights.
+
+NOTICE
+These Materials are proprietary. No permission is granted to the public to use,
+copy, modify, publish, distribute, or exploit them. Access to a repository,
+including private repository access, does not by itself grant a license beyond
+the narrow permission expressly stated below.
+
+1. DEFINITIONS
+“Materials” means this repository and all source code, object code, designs,
+documentation, specifications, interfaces, workflows, schemas, prompts,
+software architecture, graphics, assets, and other content made available by
+the Rights Holder, excluding third-party components that are clearly identified
+as such and remain subject to their own licenses.
+“Authorized User” means a person who has received explicit written permission
+from the Rights Holder for a specifically described purpose and period.
+“Written Permission” means written authorization issued by a person authorized
+to act for the Rights Holder. Repository access, silence, prior dealings, or
+an automated response is not Written Permission.
+
+2. OWNERSHIP AND RESERVATION OF RIGHTS
+All rights, title, and interest in the Materials remain with the Rights Holder
+or the respective third-party rights owners. No title or ownership is transferred.
+All rights not expressly granted in this license are reserved.
+
+3. NARROW INTERNAL LICENSE
+Only an Authorized User may access and use the Materials, and only for the
+private internal development or evaluation purpose stated in the relevant
+Written Permission. This permission is limited, non-exclusive, non-transferable,
+non-sublicensable, purpose-limited, and revocable to the extent permitted by
+applicable law.
+
+No general public license, open-source license, commercial license, or right to
+distribute is granted. No permission may be inferred from the availability of
+the repository or from the ability to download its contents.
+
+4. STRICTLY PROHIBITED WITHOUT PRIOR WRITTEN PERMISSION
+To the maximum extent permitted by applicable law, no person may:
+
+(a) copy, reproduce, publish, distribute, disclose, sublicense, sell, rent,
+    lease, lend, mirror, share, or otherwise provide the Materials to any
+    unauthorized person or entity;
+(b) use, reuse, adapt, modify, translate, merge, create derivative works from,
+    or incorporate the Materials into any other software, product, service,
+    dataset, or project outside the expressly authorized purpose;
+(c) use the Materials for commercial exploitation, paid services, hosted
+    services, consulting for third parties, resale, competitive development,
+    or a competing or substitute product;
+(d) use the Materials, prompts, outputs, or non-public technical information
+    to train, fine-tune, evaluate, or improve a machine-learning model or
+    dataset, except for an expressly authorized private internal use;
+(e) publish screenshots, benchmarks, source excerpts, technical details, or
+    other non-public project information;
+(f) remove, conceal, alter, or bypass copyright notices, license terms,
+    security mechanisms, access controls, provenance, or attribution;
+(g) reverse engineer, decompile, or disassemble compiled components, except
+    to the limited extent such activity cannot lawfully be prohibited;
+(h) upload or transfer the Materials to a public repository, public paste,
+    public package registry, or third-party service in a manner that grants
+    others access, except where expressly authorized in writing;
+(i) use the Materials to violate law, infringe third-party rights, or breach
+    a confidentiality, security, or data-protection obligation; or
+(j) authorize, encourage, or assist another person to perform any prohibited
+    act listed in this section.
+
+5. CONTRIBUTORS, CONTRACTORS, AND AUTOMATED AGENTS
+A collaborator, contractor, service provider, or automated agent may access
+only the portions and capabilities needed for a specifically authorized task.
+The person configuring such access must use least-privilege permissions and
+must not provide credentials, secrets, or non-public Materials to unauthorized
+parties. Automated agents acquire no ownership or independent license through
+their access. Any third-party tool or model remains subject to its own terms;
+no confidential Materials should be supplied to it unless that transfer is
+authorized and appropriate safeguards are in place.
+
+6. THIRD-PARTY COMPONENTS
+Third-party components remain governed by their respective licenses. This
+license does not replace, expand, or restrict rights granted by a third party.
+The recipient must preserve and comply with applicable third-party notices and
+licenses. The Rights Holder grants rights only to the extent it owns or controls
+the relevant Materials.
+
+7. CONFIDENTIALITY AND SECURITY
+Unless separately authorized in writing, treat non-public Materials, credentials,
+architecture details, project data, and internal documentation as confidential.
+Do not disclose credentials or secrets in source code, prompts, logs, issues,
+public conversations, or third-party services. This section supplements, and
+does not replace, any separate valid confidentiality agreement.
+
+8. TERMINATION
+Any permission granted under this license may be suspended or terminated for
+breach, subject to applicable law and any valid separate written agreement.
+Upon termination, the Authorized User must stop the use covered by the grant
+and, where legally permitted, return or delete copies under their control.
+Termination does not extinguish rights or remedies that accrued earlier.
+
+9. DISCLAIMER OF WARRANTIES
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE MATERIALS ARE PROVIDED
+“AS IS” AND “AS AVAILABLE”, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+EXPRESS, IMPLIED, STATUTORY, OR OTHERWISE, INCLUDING WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, NON-INFRINGEMENT,
+ACCURACY, OR AVAILABILITY. NO GUARANTEE IS MADE THAT THE MATERIALS ARE SECURE,
+ERROR-FREE, OR SUITABLE FOR ANY PARTICULAR PURPOSE.
+
+10. LIMITATION OF LIABILITY
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE RIGHTS HOLDER AND
+CONTRIBUTORS SHALL NOT BE LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+PUNITIVE, OR CONSEQUENTIAL DAMAGES, OR FOR LOSS OF DATA, PROFITS, GOODWILL,
+BUSINESS, OR SERVICE AVAILABILITY, ARISING FROM OR RELATING TO THE MATERIALS
+OR THIS LICENSE. NOTHING IN THIS LICENSE EXCLUDES OR LIMITS LIABILITY THAT
+CANNOT LAWFULLY BE EXCLUDED OR LIMITED.
+
+11. COMPLIANCE AND REMEDIES
+Unauthorized use may infringe intellectual-property rights or breach other
+applicable obligations. The Rights Holder reserves any remedies available
+under applicable law. No remedy stated here is intended to remove a right or
+remedy that applicable law makes mandatory.
+
+12. NO IMPLIED WAIVER; WRITTEN CHANGES
+Failure to enforce any provision does not constitute a waiver unless expressly
+recorded in writing by an authorized representative of the Rights Holder.
+Any additional permission, amendment, or waiver must be explicit and in writing.
+
+13. GOVERNING LAW AND SEVERABILITY
+This license is subject to applicable law. No governing-law or jurisdiction
+term is intended to override mandatory legal requirements. If any provision
+is found unenforceable, it shall be limited only to the extent necessary, and
+the remaining provisions shall continue to the extent legally permitted.
+
+14. REQUESTING PERMISSION
+A request must identify the Materials, intended purpose, users, duration,
+environment, and any proposed disclosure or distribution. Permission exists
+only if expressly granted in writing by an authorized representative of the
+Rights Holder.
+
+BY ACCESSING OR USING THE MATERIALS, AN AUTHORIZED USER ACKNOWLEDGES THESE
+RESTRICTED-USE TERMS. IF YOU DO NOT HAVE WRITTEN PERMISSION OR DO NOT ACCEPT
+THESE TERMS, DO NOT ACCESS OR USE THE MATERIALS.
+
+ALL RIGHTS NOT EXPRESSLY GRANTED ARE RESERVED.
