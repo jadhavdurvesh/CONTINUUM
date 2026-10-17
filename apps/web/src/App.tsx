@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import {
   Activity, Archive, ArrowDownRight, ArrowUpRight, Bot, Boxes, CalendarDays,
-  CheckCircle2, ChevronDown, CircleHelp, Command, FileText, FlaskConical,
+  ChevronDown, CircleHelp, Command, FileText, FlaskConical,
   FolderKanban, GitBranch, LockKeyhole, Plus, Search, Settings2, ShieldCheck,
-  ShieldAlert, Sparkles, Target, TimerReset, Workflow, Zap
+  ShieldAlert, Sparkles, Target, TimerReset, Workflow
 } from "lucide-react";
 
 type Health = { status: string; service: string; version?: string };
