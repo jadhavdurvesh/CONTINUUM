@@ -1,4 +1,5 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
 import {
   Activity, ArrowDownRight, ArrowUpRight, Bell, BookOpen, Bot, Boxes, CalendarDays,
   Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, Command,
@@ -41,6 +42,9 @@ function App() {
   const [locks, setLocks] = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
   const [grants, setGrants] = useState<any[]>([]);
+  const [members, setMembers] = useState<any[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [showTaskForm, setShowTaskForm] = useState(false);
@@ -84,19 +88,26 @@ function App() {
 
   const loadProjectData = useCallback(async () => {
     if (!supabase || !project) { setTasks([]); setEvents([]); setLocks([]); return; }
-    const [taskResult, eventResult, lockResult, requestResult, grantResult] = await Promise.all([
+    const [taskResult, eventResult, lockResult, requestResult, grantResult, memberResult, profileResult] = await Promise.all([
       supabase.from("tasks").select("*").eq("project_id", project.id).order("created_at", { ascending: false }),
       supabase.from("activity_events").select("*").eq("project_id", project.id).order("created_at", { ascending: false }).limit(30),
       supabase.from("resource_locks").select("*").eq("project_id", project.id).eq("is_locked", true),
       supabase.from("permission_requests").select("*").eq("project_id", project.id).eq("status", "pending").order("created_at", { ascending: true }),
-      supabase.from("permission_grants").select("*").eq("project_id", project.id).is("revoked_at", null)
+      supabase.from("permission_grants").select("*").eq("project_id", project.id).is("revoked_at", null),
+      supabase.from("project_members").select("*").eq("project_id", project.id).order("joined_at", { ascending: true }),
+      supabase.from("profiles").select("id,display_name")
     ]);
     if (taskResult.error) setLoadError(taskResult.error.message);
     else setTasks((taskResult.data ?? []) as Task[]);
     if (!eventResult.error) setEvents((eventResult.data ?? []) as ActivityEvent[]);
     if (!lockResult.error) setLocks(lockResult.data ?? []);
     if (!requestResult.error) setRequests(requestResult.data ?? []);
-    if (!grantResult.error) setGrants(grantResult.data ?? []);  }, [project?.id, session?.user?.id]);
+    if (!grantResult.error) setGrants(grantResult.data ?? []);
+    if (!memberResult.error) {
+      const names = new Map((profileResult.data ?? []).map((profile: any) => [profile.id, profile.display_name]));
+      setMembers((memberResult.data ?? []).map((member: any) => ({ ...member, display_name: names.get(member.user_id) ?? "" })));
+    }
+  }, [project?.id, session?.user?.id]);
 
   useEffect(() => { void loadProjectData(); }, [loadProjectData]);
 
@@ -226,6 +237,22 @@ function App() {
     notify(approve ? "Edit permission granted for 24 hours." : "Permission request declined.");
     void loadProjectData();
   }
+  async function inviteMember(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase || !project || !isOwner) return;
+    const normalizedEmail = inviteEmail.trim().toLowerCase();
+    if (!normalizedEmail) return;
+    setInviting(true);
+    const { data, error } = await supabase.functions.invoke("invite-project-member", {
+      body: { project_id: project.id, email: normalizedEmail }
+    });
+    setInviting(false);
+    if (error || data?.error) { notify(error?.message ?? data.error); return; }
+    setInviteEmail("");
+    notify(data?.message ?? "Invitation processed.");
+    await loadProjectData();
+  }
+
   if (!authReady) return <div className="boot-screen"><div className="brand-symbol"><Command size={23}/></div><span>Connecting to workspace…</span></div>;
 
   if (!cloudConfigured || !supabase) {
@@ -314,6 +341,12 @@ function App() {
             <section className="panel workforce-panel"><div className="panel-heading"><div><div className="section-kicker">DISTRIBUTED WORK</div><h2>Agents & workstations</h2><p>Cloud coordination, local execution.</p></div><Bot size={18} className="muted-icon"/></div><div className="worker-callout"><div className="worker-icon"><Bot size={20}/></div><div><strong>Control plane ready to configure</strong><span>Worker heartbeats and agent handoffs are the next integration milestone.</span></div><button className="icon-quiet" onClick={() => setPage("Agents & workers")} aria-label="Open agents"><ArrowUpRight size={16}/></button></div></section>
           </div>
         </> : page === "Tasks" ? <section className="panel full-panel"><div className="panel-heading"><div><div className="section-kicker">PROJECT WORK</div><h2>Task register</h2><p>Task updates are stored in the shared cloud database.</p></div><button className="button primary" onClick={() => setShowTaskForm(true)}><Plus size={15}/> New task</button></div><div className="task-toolbar"><div className="search-field"><Search size={15}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Find a task…"/></div><select value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter tasks"><option value="all">All statuses</option>{statusOrder.map(s => <option value={s} key={s}>{statusLabels[s]}</option>)}</select></div>{filteredTasks.length ? <div className="task-list full-task-list">{filteredTasks.map(task => <TaskRow key={task.id} task={task} locked={isLocked(locks, task)} canManage={isOwner} onStatus={updateTaskStatus} onLock={toggleLock} onRequest={requestPermission}/>)}</div> : <EmptyInline icon={Search} title="No matching tasks" text="Try another filter or create a task for this project." action="Create task" onAction={() => setShowTaskForm(true)}/>}</section> : page === "Activity" ? <section className="panel full-panel"><div className="panel-heading"><div><div className="section-kicker">TRACEABILITY</div><h2>Project activity</h2><p>Recorded events from the shared workspace.</p></div><Activity size={19} className="muted-icon"/></div>{events.length ? <div className="activity-list expanded-activity">{events.map(event => <ActivityRow key={event.id} event={event}/>)}</div> : <EmptyInline icon={Activity} title="The audit trail is empty" text="Create or update a task to record the first event."/>}</section> : page === "Protected resources" ? <section className="panel full-panel"><div className="panel-heading"><div><div className="section-kicker">CHANGE CONTROL</div><h2>Protected resources</h2><p>Locks are enforced in the database, not just hidden in the interface.</p></div><LockKeyhole size={19} className="muted-icon"/></div>{locks.length ? <div className="protected-list">{locks.map((lock) => { const task = tasks.find(t => t.id === lock.resource_id); return <div className="protected-row" key={lock.id}><div className="protected-icon"><LockKeyhole size={17}/></div><div className="protected-copy"><strong>{task?.title ?? "Protected resource"}</strong><span>{lock.reason} · {new Date(lock.created_at).toLocaleString()}</span></div>{isOwner && task && <button className="button secondary small" onClick={() => void toggleLock(task)}>Unlock</button>}</div>; })}</div> : <EmptyInline icon={ShieldCheck} title="Nothing is locked" text="Protect an important task from accidental edits. Only the project owner can create or remove locks."/>}{isOwner && <div className="permission-review"><div className="section-kicker">OWNER APPROVAL QUEUE</div><h3>Permission requests</h3><p>Approval grants resource-specific edit access for 24 hours.</p>{requests.length ? requests.map((request) => { const relatedTask=tasks.find((task) => task.id===request.resource_id); return <div className="protected-row" key={request.id}><div className="protected-icon"><ShieldEllipsis size={17}/></div><div className="protected-copy"><strong>{relatedTask?.title ?? "Protected resource request"}</strong><span>Requested by {String(request.requested_by).slice(0,8)}… · {new Date(request.created_at).toLocaleString()}</span></div><button className="button secondary small" onClick={() => void reviewPermission(request,false)}>Deny</button><button className="button primary small" onClick={() => void reviewPermission(request,true)}>Grant 24h</button></div>; }) : <div className="permission-empty">No pending requests.</div>}</div>}<div className="governance-note"><ShieldCheck size={16}/><span>For a locked task, the database rejects edits unless the user has an active, resource-scoped permission grant. The owner can revoke protection.</span></div></section> : page === "Agents & workers" ? <section className="panel full-panel"><div className="panel-heading"><div><div className="section-kicker">EXECUTION CONTROL PLANE</div><h2>Agents & connected PCs</h2><p>Shared coordination lives in the cloud; coding tools execute only on authorized workers.</p></div><Bot size={19} className="muted-icon"/></div><div className="architecture-cards"><div className="architecture-card"><div className="architecture-icon cloud"><HardDrive size={19}/></div><span className="status-tag ready">CLOUD STATE</span><h3>Shared control plane</h3><p>Tasks, run records, permissions, checkpoints, and audit events persist centrally so another PC can pick up the work.</p></div><div className="architecture-card"><div className="architecture-icon worker"><Command size={19}/></div><span className="status-tag planned">WORKER AGENT</span><h3>Local execution nodes</h3><p>Each authorized PC will run a worker that claims scoped tasks, executes in an isolated workspace, and reports logs and checkpoints.</p></div><div className="architecture-card"><div className="architecture-icon route"><Workflow size={19}/></div><span className="status-tag planned">RELAY ADAPTER</span><h3>Model failover</h3><p>RELAY will route model calls and provider failures; project state and checkpoints remain independent of any model conversation.</p></div></div><div className="governance-note"><LockKeyhole size={16}/><span>Agent dispatch is not active yet. The worker gateway, signed registration, leases, heartbeat and cross-runtime checkpoint handoff must be completed before running autonomous work.</span></div></section> : page === "Documentation" ? <section className="panel full-panel"><div className="panel-heading"><div><div className="section-kicker">PROJECT KNOWLEDGE</div><h2>Knowledge base</h2><p>Decision records and documents will be linked to the tasks they explain.</p></div><FileText size={19} className="muted-icon"/></div><EmptyInline icon={BookOpen} title="Knowledge base not connected yet" text="The initial cloud schema focuses on projects, tasks, permissions, and audit events. Versioned document storage is a later phase."/></section> : <section className="panel full-panel"><div className="panel-heading"><div><div className="section-kicker">WORKSPACE ADMINISTRATION</div><h2>Workspace settings</h2><p>Account and cloud configuration.</p></div><Settings2 size={19} className="muted-icon"/></div><div className="settings-list"><div><span>Signed in as</span><strong>{session.user.email}</strong></div><div><span>Workspace role</span><strong>{isOwner ? "Owner" : "Collaborator"}</strong></div><div><span>Backend</span><strong>Hosted Supabase · PostgreSQL</strong></div><div><span>Realtime sync</span><strong>Subscribed for this project</strong></div><div><span>Project ID</span><code>{project.id}</code></div></div><button className="button secondary" onClick={() => void signOut()}><LogOut size={15}/> Sign out</button></section>}
+        {page === "Settings" && project && <section className="panel full-panel team-management">
+  <div className="panel-heading"><div><div className="section-kicker">COLLABORATION</div><h2>People & access</h2><p>One cloud workspace shared between your authorized accounts.</p></div><Users size={19} className="muted-icon"/></div>
+  {isOwner && <form className="invite-form" onSubmit={inviteMember}><label htmlFor="member-email">Invite your partner by email</label><div className="invite-input-row"><input id="member-email" type="email" autoComplete="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} required placeholder="partner@example.com"/><button className="button primary" type="submit" disabled={inviting}>{inviting ? "Sending…" : "Send invite"} <ArrowUpRight size={14}/></button></div><small>The server verifies owner access and sends the invitation through the configured email provider.</small></form>}
+  <div className="member-list">{members.map((member) => <div className="member-row" key={member.user_id}><div className="member-avatar">{String(member.display_name || member.user_id).slice(0,1).toUpperCase()}</div><div className="member-details"><strong>{member.user_id === currentUserId ? (session.user.email ?? member.display_name ?? "You") : (member.display_name || "Workspace member")}</strong><span>{member.user_id === currentUserId ? "Your account" : "Shared workspace access"}</span></div><span className={"member-role " + member.role}>{member.role === "owner" ? "Owner" : "Collaborator"}</span></div>)}{members.length === 0 && <div className="permission-empty">Memberships will appear after the cloud migration has been applied.</div>}</div>
+  <div className="governance-note"><ShieldCheck size={16}/><span>Only the owner can invite members or change project-wide access. Protected-resource edits require an explicit scoped grant or unlocking the resource.</span></div>
+</section>}
         <footer className="page-footer"><span>CONTINUUM <i/> PRIVATE ENGINEERING WORKSPACE</span><span><span className="online-pulse"/> Shared cloud state · Changes are attributed</span></footer>
       </div>
     </main>

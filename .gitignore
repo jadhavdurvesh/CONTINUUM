@@ -34,3 +34,9 @@ logs/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local frontend config and desktop build output
+apps/web/.env.local
+apps/desktop/renderer/
+apps/desktop/LICENSE
+apps/desktop/release/
