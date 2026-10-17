@@ -1,48 +1,49 @@
 # Architecture
 
-## Logical components
+## Shared cloud, local execution
 
-1. **Web dashboard:** project views, task board, analytics, agent activity, diffs, approvals, settings.
-2. **API and policy layer:** authentication verification, authorization, project APIs, lock enforcement, audit events, worker registration.
-3. **Project data layer:** PostgreSQL with row-level security.
-4. **Orchestrator:** task state machine, dependency scheduler, retries, checkpoints, handoff, approval gates.
-5. **RELAY adapter:** routes model requests; does not own project task state.
-6. **Agent adapters:** normalize start, continue, cancel, status, and result operations.
-7. **Workers:** local first, remote optional; bounded execution in isolated workspaces.
-8. **Evidence adapters:** repository events, CI results, test artifacts, releases.
+The system is cloud-first for shared state and multi-PC coordination. It is not designed around one developer's laptop hosting the backend.
+
+- **Web UI:** React + TypeScript + Vite deployed to Vercel.
+- **Identity and shared data:** hosted Supabase Auth + PostgreSQL + Row Level Security.
+- **Live collaboration:** Supabase Realtime for authorized task/activity updates and presence.
+- **Privileged operations:** Supabase SQL functions and Edge Functions. Secret keys never ship in the browser or desktop installer.
+- **Workers:** a small worker service on each authorized PC performs local coding work and reports task status/checkpoints to the cloud control plane.
+- **Model routing:** the existing RELAY service remains the provider-routing/failover layer.
+- **Desktop app:** Electron shell around the same dashboard; it signs into the shared cloud rather than creating a separate per-PC database.
 
 ## Responsibility boundaries
 
 - Orchestrator decides what task should happen next.
 - Coding-agent runtime decides how to perform a coding task.
-- RELAY decides which model handles a model request.
-- Project database records durable state and provenance.
-- Git records version-controlled code.
+- RELAY routes model requests across providers and handles model-provider failover.
+- Cloud database stores durable project state, permissions, checkpoints, and provenance.
+- Git records code history.
 - Test-run records and artifacts provide evidence of test outcomes.
+- Local workers execute code but do not become the source of truth.
 
-## Task lifecycle
+## Cross-PC workflow
 
-`queued -> ready -> running -> checkpointed -> review -> approved -> completed`
+1. User creates or assigns a task in the web/desktop dashboard.
+2. Cloud database stores the task and emits authorized realtime updates.
+3. An authorized worker authenticates and claims a task through a server-side lease operation.
+4. Worker executes in a dedicated Git worktree with bounded tools and permissions.
+5. Worker periodically reports heartbeat, logs, changed paths, test evidence, and checkpoints.
+6. If a provider or runtime limit is reached, the worker saves the actual workspace state and error classification.
+7. The orchestrator selects a compatible runtime/worker and hands it a durable context packet.
+8. The next worker inspects the workspace before resuming.
+9. Human approval gates protected changes, merges, destructive actions, and deployment.
 
-Other states include `blocked`, `failed`, `cancelled`, and `needs_permission`. Validate state transitions server-side and append an event for each transition.
+## Security boundaries
 
-## Agent handoff
+- Browser and desktop renderer use only the Supabase publishable key with RLS.
+- No service-role/secret key is placed in Vite environment variables or desktop files.
+- Worker authentication is separate from human sessions and is scoped to the minimum projects/actions required.
+- Worker leases must prevent duplicate task claims.
+- Protected-resource checks and writes must be concurrency-safe.
+- Agent tools run in isolated worktrees and restricted environments.
+- Treat repository text, issues, and external tool output as untrusted data.
 
-1. Detect a classified, retryable provider/runtime failure or an explicit stop.
-2. Stop scheduling new operations for that run.
-3. Inspect the actual worktree; do not assume a failed request made no changes.
-4. Persist task state, tool events, current diff/commit, test results, and next actions.
-5. Select a compatible runtime with available capacity and permissions.
-6. Provide project rules, relevant documents, task contract, checkpoint, and workspace reference.
-7. Require the new agent to inspect the workspace before editing.
-8. Resume, verify tests, and record the handoff outcome.
+## Important implementation status
 
-Cross-runtime handoff must rely on durable project state rather than assuming chat-history portability.
-
-## Concurrency
-
-Use isolated Git worktrees or separate checkouts for parallel code tasks. Store task leases/heartbeats and prevent duplicate task claiming. Use optimistic version checks or transactions for conflicting edits. Lock validation and the protected write must be concurrency-safe.
-
-## Observability
-
-Record timestamps, task ID, agent/runtime, model/provider when known, status transitions, tool calls, changed paths, test run IDs, retry count, usage/cost where available, and redacted error details.
+The current first milestone implements cloud-authenticated task creation/status updates, realtime refresh, project activity, and database-enforced task locks after the migration is applied and a Supabase project is configured. It defines the agent-run/worker-node schema and interface surfaces, but does **not** yet include a complete worker gateway, secure worker token issuance, lease/claim RPC, checkpoint transport, or RELAY runtime adapter. Those must be implemented and tested before autonomous multi-PC execution is enabled.
