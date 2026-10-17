@@ -3,7 +3,17 @@
 **AI Project Operating System**  
 *One project. Shared knowledge. Continuous progress.*
 
-CONTINUUM is a collaborative project workspace for managing the full lifecycle of a complex engineering project. It connects planning, task management, requirements, documentation, test evidence, releases, project history, and AI-agent operations.
+CONTINUUM is a collaborative project workspace for the full lifecycle of an engineering project. It aims to connect planning, tasks, documentation, test evidence, releases, project history, and AI-agent operations.
+
+## Current scaffold
+
+- **Web:** React + TypeScript + Vite starter dashboard
+- **API:** FastAPI health endpoint and API foundation
+- **Planning:** product vision, architecture, data model, security, and roadmap documentation
+- **Governance:** planned invite-only accounts, permissions, protected resources, and audit history
+- **AI workflow:** planned RELAY integration and adapters for existing coding-agent runtimes
+
+The dashboard and API are starting points, not a completed production system. Authentication, persistence, project metrics, lock enforcement, and agent orchestration still need implementation.
 
 ## Design principles
 
@@ -15,17 +25,6 @@ CONTINUUM is a collaborative project workspace for managing the full lifecycle o
 - **Local-first execution:** begin on a developer machine and add remote workers later.
 - **Budget-aware:** prioritize open-source tools and available free tiers.
 
-## Planned modules
-
-1. Project command center and analytics
-2. Workstreams, requirements, milestones, dependencies, tasks, risks, and blockers
-3. Documents, architecture, decisions, and shared project knowledge
-4. Repository, build, test, defect, and release traceability
-5. AI-agent registry, scheduler, shared context, checkpoints, and automatic handoffs
-6. Invite-only accounts, roles, resource locks, permission requests, and approvals
-7. Audit history and resource versioning
-8. Local worker and optional remote workers
-
 ## Proposed stack
 
 - Frontend: React + TypeScript + Vite
@@ -35,16 +34,43 @@ CONTINUUM is a collaborative project workspace for managing the full lifecycle o
 - Agent execution: existing coding-agent runtimes behind a unified interface
 - Local execution: isolated Git worktrees and restricted/sandboxed commands
 
-The stack is a starting proposal. Architecture changes should be captured as versioned decisions.
+## Run the starter
 
-## Build phases
+### API
 
-1. Project foundation: projects, members, requirements, tasks, documents, decisions, and activity history.
-2. Collaboration and governance: authentication, roles, permissions, locks, scoped grants, and audit history.
-3. Engineering traceability: repositories, commits, test cases, test runs, artifacts, issues, and releases.
-4. AI orchestration: RELAY adapter, coding-agent runtime adapter, scheduler, checkpoints, and handoffs.
-5. Project operations: dashboard, evidence-based progress, planning agent, quality workflows, supervised autopilot.
-6. Distributed execution: local worker and optional remote workers.
+Requires Python 3.11 or newer.
+
+```bash
+cd services/api
+python -m venv .venv
+# Windows PowerShell: .venv\Scripts\Activate.ps1
+# macOS/Linux: source .venv/bin/activate
+pip install -e ".[dev]"
+uvicorn app.main:app --reload --port 8000
+```
+
+API health: http://127.0.0.1:8000/api/health  
+Interactive API docs: http://127.0.0.1:8000/docs
+
+### Web dashboard
+
+Requires Node.js 20 or newer.
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
+
+Open http://localhost:5173. The dashboard will show whether the local API is reachable. It intentionally does not invent project metrics while no project data source exists.
+
+## Documentation
+
+- [Product vision](docs/product-vision.md)
+- [Architecture](docs/architecture.md)
+- [Data model](docs/data-model.md)
+- [Security and permissions](docs/security-and-permissions.md)
+- [Roadmap](docs/roadmap.md)
 
 ## Safety defaults
 
@@ -55,16 +81,6 @@ The stack is a starting proposal. Architecture changes should be captured as ver
 - Keep execution bounded by timeouts, retries, tool permissions, and usage limits.
 - Treat repository content and issue text as untrusted input.
 - Do not report a test as passed unless a recorded execution provides evidence.
-
-## Repository status
-
-**Status:** Initial planning scaffold. Product features are not implemented solely because they are described here.
-
-See [product vision](docs/product-vision.md), [architecture](docs/architecture.md), [data model](docs/data-model.md), [security and permissions](docs/security-and-permissions.md), and [roadmap](docs/roadmap.md).
-
-## Development
-
-Copy `.env.example` to `.env` for local settings. Do not commit real credentials. Setup instructions for each runnable component will be added with the first implementation phase.
 
 ## License
 
