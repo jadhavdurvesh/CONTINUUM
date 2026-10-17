@@ -39,6 +39,8 @@ function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [locks, setLocks] = useState<any[]>([]);
+  const [requests, setRequests] = useState<any[]>([]);
+  const [grants, setGrants] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [showTaskForm, setShowTaskForm] = useState(false);
@@ -82,16 +84,19 @@ function App() {
 
   const loadProjectData = useCallback(async () => {
     if (!supabase || !project) { setTasks([]); setEvents([]); setLocks([]); return; }
-    const [taskResult, eventResult, lockResult] = await Promise.all([
+    const [taskResult, eventResult, lockResult, requestResult, grantResult] = await Promise.all([
       supabase.from("tasks").select("*").eq("project_id", project.id).order("created_at", { ascending: false }),
       supabase.from("activity_events").select("*").eq("project_id", project.id).order("created_at", { ascending: false }).limit(30),
-      supabase.from("resource_locks").select("*").eq("project_id", project.id).eq("is_locked", true)
+      supabase.from("resource_locks").select("*").eq("project_id", project.id).eq("is_locked", true),
+      supabase.from("permission_requests").select("*").eq("project_id", project.id).eq("status", "pending").order("created_at", { ascending: true }),
+      supabase.from("permission_grants").select("*").eq("project_id", project.id).is("revoked_at", null)
     ]);
     if (taskResult.error) setLoadError(taskResult.error.message);
     else setTasks((taskResult.data ?? []) as Task[]);
     if (!eventResult.error) setEvents((eventResult.data ?? []) as ActivityEvent[]);
     if (!lockResult.error) setLocks(lockResult.data ?? []);
-  }, [project?.id]);
+    if (!requestResult.error) setRequests(requestResult.data ?? []);
+    if (!grantResult.error) setGrants(grantResult.data ?? []);  }, [project?.id, session?.user?.id]);
 
   useEffect(() => { void loadProjectData(); }, [loadProjectData]);
 
@@ -101,6 +106,8 @@ function App() {
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: `project_id=eq.${project.id}` }, () => void loadProjectData())
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "activity_events", filter: `project_id=eq.${project.id}` }, () => void loadProjectData())
       .on("postgres_changes", { event: "*", schema: "public", table: "resource_locks", filter: `project_id=eq.${project.id}` }, () => void loadProjectData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "permission_requests", filter: `project_id=eq.${project.id}` }, () => void loadProjectData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "permission_grants", filter: `project_id=eq.${project.id}` }, () => void loadProjectData())
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [project?.id, loadProjectData]);
@@ -329,7 +336,7 @@ function ActivityRow({event}:{event:ActivityEvent}) {
   const actionLabel = event.action.replaceAll(".", " ");
   return <div className="activity-row"><div className={`activity-avatar actor-${event.actor_type}`}>{event.actor_type === "agent" ? <Bot size={14}/> : event.actor_type === "system" ? <Zap size={14}/> : <Users size={14}/>}</div><div className="activity-copy"><div><strong>{title}</strong><span>{actionLabel}</span></div><small>{event.actor_type === "human" ? "Workspace member" : event.actor_type === "agent" ? "AI agent" : "System"} · {relativeTime(event.created_at)}</small></div><ChevronRight size={14} className="activity-chevron"/></div>;
 }
-function Modal({title,eyebrow,onClose,children}:{title:string;eyebrow:string;onClose:()=>void;children:React.ReactNode}) {
+function Modal({title,eyebrow,onClose,children}:{title:string;eyebrow:string;onClose:()=>void;children:ReactNode}) {
   useEffect(() => { const handler=(e:KeyboardEvent)=>{if(e.key==="Escape")onClose();}; window.addEventListener("keydown",handler); return ()=>window.removeEventListener("keydown",handler); },[onClose]);
   return <div className="modal-backdrop" onMouseDown={(e)=>{if(e.target===e.currentTarget)onClose();}}><section className="modal"><div className="modal-head"><div><div className="section-kicker">{eyebrow}</div><h2>{title}</h2></div><button className="icon-quiet" onClick={onClose} aria-label="Close dialog"><X size={18}/></button></div>{children}</section></div>;
 }
