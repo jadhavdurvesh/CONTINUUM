@@ -34,6 +34,16 @@ function leaf(path: string) { return path.split("/").pop() ?? path; }
 function parseArgs(raw: string) {
   return (raw.match(/"[^"]*"|'[^']*'|[^\s]+/g) ?? []).map(part => ((part.startsWith('"') && part.endsWith('"')) || (part.startsWith("'") && part.endsWith("'"))) ? part.slice(1, -1) : part);
 }
+function normalizeWorkerUrl(raw: string): string {
+  let parsed: URL;
+  try { parsed = new URL(raw.trim()); }
+  catch { throw new Error("Enter the loopback worker URL, for example http://127.0.0.1:4318."); }
+  const loopbackHosts = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+  if (parsed.protocol !== "http:" || !loopbackHosts.has(parsed.hostname.toLowerCase()) || parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) {
+    throw new Error("For safety, the local IDE only sends its worker token to localhost, 127.0.0.1, or [::1] over HTTP.");
+  }
+  return parsed.origin;
+}
 function savedConfig() {
   try {
     const raw = localStorage.getItem(CONFIG_KEY);
