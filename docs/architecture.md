@@ -1,51 +1,40 @@
-# Architecture
+# CONTINUUM architecture
 
-## Shared cloud, local execution
+## Product boundary
 
-The system is cloud-first for shared state and multi-PC coordination. It is not designed around one developer's laptop hosting the backend.
+CONTINUUM is a native local-first IDE paired with hosted collaboration and AI. The desktop application is implemented with PySide6/Qt and talks to the operating system's filesystem directly. It is not an Electron application or a WebView wrapper.
 
-- **Web UI:** React + TypeScript + Vite deployed to Vercel.
-- **Identity and shared data:** hosted Supabase Auth + PostgreSQL + Row Level Security.
-- **Live collaboration:** Supabase Realtime for authorized task/activity updates, code-file changes, locks, and permission requests.
-- **Code Workbench:** CodeMirror in the dashboard, with versioned cloud file records and optimistic version checks.
-- **Local IDE worker:** opt-in loopback FastAPI service for the selected local checkout, token-authenticated file access, cloud-verified project membership and repository path locks, Git status/diff/explicit commits, and allowlisted build/test commands. Mutating commands are blocked while a protected path lacks an active grant. It never pushes or deploys.
-- **Privileged operations:** Supabase SQL functions and Edge Functions. Secret keys never ship in the browser or desktop installer.
-- **Workers:** a small worker service on each authorized PC performs local coding work and reports task status/checkpoints to the cloud control plane.
-- **Model routing:** the existing RELAY service remains the provider-routing/failover layer.
-- **Desktop app:** Electron shell around the same dashboard; it signs into the shared cloud rather than creating a separate per-PC database.
+## Responsibilities
 
-## Responsibility boundaries
+- **Native desktop (apps/native)** — local folder explorer, tabbed text editing, safe saves, local backups, workspace context collection, optional cloud sign-in, and a review/apply workflow for cloud proposals.
+- **Web dashboard (apps/web)** — project, task, protected-resource, activity, and shared code-workbench UI deployed on Vercel.
+- **Vercel agent APIs (apps/web/api/agents)** — authenticate using the supplied Supabase user session, confirm access through Row Level Security, route model requests across provider configurations, write durable results to Supabase, and return reviewable proposals.
+- **Supabase** — hosted authentication, PostgreSQL, RLS, Realtime, persistent agent sessions/messages, shared tasks, and protected resource records.
+- **AI providers** — OpenAI-compatible endpoints configured using server-side Vercel environment variables. The native desktop never receives the provider API keys.
+- **Optional legacy local worker (services/worker)** — retained for the browser Local IDE while the native desktop becomes the primary local workspace.
 
-- Orchestrator decides what task should happen next.
-- Coding-agent runtime decides how to perform a coding task.
-- RELAY routes model requests across providers and handles model-provider failover.
-- Cloud database stores durable project state, permissions, checkpoints, and provenance.
-- Git records repository history once the worker/repository adapter is connected; the initial Code Workbench has its own database-backed file history.
-- Test-run records and artifacts provide evidence of test outcomes.
-- Local workers execute code but do not become the source of truth.
+## Online/offline behavior
 
-## Cross-PC workflow
+No cloud endpoint is required to open a local directory, browse normal files, create a local file, edit, save, or close the native app. Cloud sign-in, project data, agent sessions, model calls, and shared database state need an internet connection. The interface reports unavailable cloud features without blocking local editing.
 
-1. User creates or assigns a task in the web/desktop dashboard.
-2. Cloud database stores the task and emits authorized realtime updates.
-3. An authorized worker authenticates and claims a task through a server-side lease operation.
-4. Worker executes in a dedicated Git worktree with bounded tools and permissions.
-5. Worker periodically reports heartbeat, logs, changed paths, test evidence, and checkpoints.
-6. If a provider or runtime limit is reached, the worker saves the actual workspace state and error classification.
-7. The orchestrator selects a compatible runtime/worker and hands it a durable context packet.
-8. The next worker inspects the workspace before resuming.
-9. Human approval gates protected changes, merges, destructive actions, and deployment.
+## Cloud agent flow
 
-## Security boundaries
+1. A user signs into CONTINUUM from the native app or dashboard.
+2. The user selects a shared Supabase project and creates a durable agent session; the prompt, role, linked task, and focus paths are stored in agent_sessions and agent_messages.
+3. When asked to run one step, the desktop sends at most 12 bounded snippets from safe local text files (or the web client sends files from code_files) to POST /api/agents/run-step with the user's Supabase access token.
+4. The Vercel function validates the session and membership using the user JWT and publishable key. The database's RLS policies remain the authority.
+5. The function routes the model call through configured providers with failover, validates the structured JSON response, and records the result and provider metadata in Supabase.
+6. The agent may return a source proposal but never executes it. The native desktop asks for explicit approval, verifies every path and shared path lock, backs up existing files, and applies the proposal locally. The dashboard applies proposals only to its shared code_files table where RLS and database triggers enforce protection.
+7. Users inspect changed files and run their own local checks. Git commits, pushes, releases, and deployments remain explicit human actions.
 
-- Browser and desktop renderer use only the Supabase publishable key with RLS.
-- No service-role/secret key is placed in Vite environment variables or desktop files.
-- Worker authentication is separate from human sessions and is scoped to the minimum projects/actions required.
-- Worker leases must prevent duplicate task claims.
-- Protected-resource checks and writes must be concurrency-safe.
-- Agent tools run in isolated worktrees and restricted environments.
-- Treat repository text, issues, and external tool output as untrusted data.
+## Credential boundaries
 
-## Important implementation status
+- VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY configure the browser client.
+- SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (or SUPABASE_ANON_KEY) configure server-side REST access using the current user's bearer token and RLS.
+- OPENAI_API_KEY, GROQ_API_KEY, and OPENROUTER_API_KEY belong only in Vercel's server-side environment variables.
+- SUPABASE_SERVICE_ROLE_KEY is not required by the agent endpoint and must never be embedded in the web bundle or desktop installer.
+- CONTINUUM_CLOUD_API_URL is injected at desktop build time as a service base URL; it is not a credential.
 
-The current milestone implements cloud-authenticated task creation/status updates, realtime refresh, project activity, versioned cloud code files, conflict-checked saves, code-file locks, database-enforced task locks, and a separately run local worker for real-checkout editing and approved development commands. It defines the agent-run/worker-node schema and interface surfaces, but does **not** yet include a complete worker gateway, secure worker token issuance, lease/claim RPC, checkpoint transport, or RELAY runtime adapter. Those must be implemented and tested before autonomous multi-PC execution is enabled.
+## Native installer
+
+GitHub Actions builds a native Windows app with PyInstaller and an Inno Setup installer. The compiled GUI is PySide6 and opens the local filesystem without a browser engine. Required public cloud connection settings are injected at build time from repository secrets so that end users do not complete a key-configuration wizard after installation.
