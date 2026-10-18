@@ -105,7 +105,7 @@ begin
   insert into public.activity_events(project_id,actor_id,actor_type,action,entity_type,entity_id,details)
   values (
     item.project_id,(select auth.uid()),'human','code_file.'||operation_name,'code_file',item.id,
-    jsonb_build_object('path',item.path,'language',item.language,'version',item.version,'operation',tg_op)
+    jsonb_build_object('title',item.path,'path',item.path,'language',item.language,'version',item.version,'operation',tg_op)
   );
   if tg_op='DELETE' then return old; end if;
   return new;

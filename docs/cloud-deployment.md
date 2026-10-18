@@ -37,13 +37,17 @@ Official references: [Supabase RLS](https://supabase.com/docs/guides/database/po
    - VITE_SUPABASE_PUBLISHABLE_KEY — publishable client key
 4. Deploy. Both PCs visit the same site and sign in to the same workspace.
 
-The publishable key is intended for client use with RLS. Never add a Supabase secret/service-role key to VITE variables or bundle it in the desktop installer.
+The publishable key is intended for client use with RLS. Never add a Supabase secret/service-role key to VITE variables or bundle it in the desktop installer. If the installer is built without Vercel build variables, it presents a cloud setup form where you enter the hosted project URL and publishable key; that client configuration is saved locally for the installation.
 
 ## Invite the second collaborator
 
 After signing in and creating a project, open Settings → Members and enter the collaborator's email. The Edge Function validates the session and project-owner membership, sends the Auth invitation, and adds the account as a collaborator. The recipient must accept the email invitation before signing in.
 
 The function uses Supabase's server-side service-role environment key. Never put that key in the web client, desktop bundle, GitHub, or a prompt.
+
+## Code Workbench
+
+The Code Workbench stores project files in the cloud database, provides syntax-aware editing for common web/Python/JSON/Markdown languages, and records prior contents on save. It performs version-checked writes to avoid silently overwriting a concurrent edit, supports owner file locks, and uses resource-scoped edit grants. These files are not yet a Git checkout. The local repository worktree, terminal, compiler/test command runner, and secure worker service are separate future integration work.
 
 ## Status and remaining work
 
