@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, Bot, Check, CheckCircle2,
-  ChevronRight, Circle, FileCode2, FolderGit2, GitBranch, Play, Plus, RefreshCw,
+  ChevronRight, Circle, FileCode2, Play, Plus, RefreshCw,
   ShieldCheck, Sparkles, Terminal, Workflow, X
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
@@ -29,6 +29,7 @@ type AgentMessage = {
   session_id: string;
   role: "user" | "assistant" | "system" | "tool";
   actor_type: "human" | "agent" | "system";
+  actor_id: string | null;
   content: string;
   metadata: Record<string, any>;
   created_at: string;
@@ -85,7 +86,6 @@ export default function AgentConsole({ projectId, userId, accessToken, onNotify 
   const selected = sessions.find(item => item.id === selectedId) ?? null;
   const latestAssistant = [...messages].reverse().find(item => item.role === "assistant");
   const latestProposal = proposalFrom(latestAssistant);
-  const selectedRun = selected?.checkpoint?.last_run_id ? String(selected.checkpoint.last_run_id) : "";
 
   const refreshSessions = useCallback(async () => {
     if (!supabase) return;
@@ -125,49 +125,40 @@ export default function AgentConsole({ projectId, userId, accessToken, onNotify 
   }, [projectId, selectedId, refreshMessages, refreshSessions]);
 
   const apiWorker = useCallback(async (path: string, body?: Record<string, unknown>) => {
-    const config = loadWorkerConfig();
-    if (!config) throw new Error("Connect the Local IDE first, then return here. Its worker pairing settings are shared in this browser profile.");
     if (!accessToken) throw new Error("Your cloud sign-in has expired. Sign in again before running an agent.");
-    const headers = new Headers({
-      Authorization: "Bearer " + config.token,
-      "X-Continuum-Project-Id": projectId,
-      "X-Continuum-User-Token": accessToken
-    });
-    const init: RequestInit = { method: body ? "POST" : "GET", mode: "cors", credentials: "omit", headers };
-    if (body) {
-      headers.set("Content-Type", "application/json");
-      init.body = JSON.stringify(body);
-    }
+    const init: RequestInit = {
+      method: body ? "POST" : "GET",
+      headers: { Authorization: "Bearer " + accessToken, ...(body ? { "Content-Type": "application/json" } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      credentials: "omit",
+    };
     let response: Response;
-    try { response = await fetch(config.url + path, init); }
-    catch { throw new Error("Could not reach the local worker. Keep it running on this PC and allow this website origin in CONTINUUM_ALLOWED_ORIGINS."); }
+    try { response = await fetch(path, init); }
+    catch { throw new Error("Could not reach the hosted agent service. Check your internet connection and Vercel deployment."); }
     const data = await response.json().catch(() => ({})) as Record<string, any>;
-    if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Local worker returned HTTP " + response.status + ".");
+    if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Cloud agent service returned HTTP " + response.status + ".");
     return data;
-  }, [accessToken, projectId]);
+  }, [accessToken]);
 
   const checkWorker = useCallback(async () => {
     setWorkerStatus("unknown");
     setWorkerMessage("");
     try {
-      const config = loadWorkerConfig();
-      if (!config) { setWorkerStatus("offline"); setWorkerMessage("Open Local IDE → Connection to pair this browser with a worker on this PC."); return; }
-      const headers = new Headers({ Authorization: "Bearer " + config.token });
-      const response = await fetch(config.url + "/api/worker/agents/status", { headers, mode: "cors", credentials: "omit" });
+      const response = await fetch("/api/agents/status", { credentials: "omit" });
       const data = await response.json().catch(() => ({})) as Record<string, any>;
-      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Worker status check failed.");
+      if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Cloud agent status check failed.");
       setProviderNames(Array.isArray(data.providers) ? data.providers : []);
-      setWorkerStatus(data.configured ? "ready" : "needs-key");
-      setWorkerMessage(data.message ?? "");
+      setWorkerStatus(data.configured ? "ready" : data.supabaseConfigured ? "needs-key" : "offline");
+      setWorkerMessage(typeof data.message === "string" ? data.message : "");
     } catch (e) {
       setWorkerStatus("offline");
-      setWorkerMessage(e instanceof Error ? e.message : "Worker status check failed.");
+      setWorkerMessage(e instanceof Error ? e.message : "Could not reach the hosted agent service.");
     }
   }, []);
 
   useEffect(() => { void checkWorker(); }, [checkWorker]);
 
-  async function createSession(event: React.FormEvent<HTMLFormElement>) {
+  async function createSession(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase || !goal.trim() || !title.trim()) return;
     setBusy(true); setError("");
@@ -203,30 +194,56 @@ export default function AgentConsole({ projectId, userId, accessToken, onNotify 
   }
 
   async function runStep() {
-    if (!selected || selected.status !== "queued") return;
+    if (!selected || selected.status !== "queued" || !supabase) return;
     setBusy(true); setError("");
     try {
-      const result = await apiWorker("/api/worker/agents/run-step", { project_id: projectId, session_id: selected.id });
+      const { data, error: fileError } = await supabase.from("code_files")
+        .select("path,content").eq("project_id", projectId).order("path").limit(500);
+      if (fileError) throw new Error(fileError.message);
+      const allFiles = (data ?? []) as { path: string; content: string }[];
+      const focus = new Set(selected.focus_paths ?? []);
+      const preferred = focus.size ? allFiles.filter(file => focus.has(file.path)) : allFiles;
+      let used = 0;
+      const workspace_context = preferred.slice(0, 12).map(file => {
+        const content = file.content.slice(0, 12000);
+        used += content.length;
+        return { path: file.path, content };
+      }).filter(() => used <= 75000);
+      const result = await apiWorker("/api/agents/run-step", { project_id: projectId, session_id: selected.id, workspace_context });
       await refreshSessions(); await refreshMessages(selected.id);
-      onNotify("RELAY step completed through " + result.provider + (result.fallback_used ? " with provider fallback." : "."));
-    } catch (e) { setError(e instanceof Error ? e.message : "Could not run the agent step."); await refreshSessions(); await refreshMessages(selected.id); }
+      onNotify("Cloud agent step completed through " + result.provider + (result.attempts > 1 ? " with provider fallback." : "."));
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not run the cloud agent step."); await refreshSessions(); await refreshMessages(selected.id); }
     finally { setBusy(false); }
   }
 
   async function applyProposal() {
-    if (!selected || !latestProposal?.files?.length) return;
-    const confirmed = window.confirm("Apply " + latestProposal.files.length + " proposed file change(s) to the real local checkout? This will not commit, push, or deploy.");
+    if (!selected || !latestProposal?.files?.length || !supabase) return;
+    const confirmed = window.confirm("Apply " + latestProposal.files.length + " proposed file change(s) to the shared cloud workbench? Protected files remain governed by database permissions.");
     if (!confirmed) return;
     setBusy(true); setError("");
     try {
-      const result = await apiWorker("/api/worker/agents/apply-proposal", { project_id: projectId, session_id: selected.id });
+      const { data: existing, error: lookupError } = await supabase.from("code_files")
+        .select("id,path").eq("project_id", projectId).in("path", latestProposal.files.map(file => file.path));
+      if (lookupError) throw new Error(lookupError.message);
+      const existingByPath = new Map(((existing ?? []) as { id: string; path: string }[]).map(file => [file.path, file.id]));
+      for (const file of latestProposal.files) {
+        const language = file.path.split(".").pop()?.toLowerCase() || "plaintext";
+        const fileId = existingByPath.get(file.path);
+        const result = fileId
+          ? await supabase.from("code_files").update({ content: file.content, language, updated_by: userId }).eq("id", fileId).eq("project_id", projectId)
+          : await supabase.from("code_files").insert({ project_id: projectId, path: file.path, content: file.content, language, created_by: userId, updated_by: userId });
+        if (result.error) throw new Error(file.path + ": " + result.error.message);
+      }
+      const next = await supabase.from("agent_sessions").update({ status: "queued", last_error: null, finished_at: null })
+        .eq("id", selected.id).eq("project_id", projectId);
+      if (next.error) throw new Error(next.error.message);
       await refreshSessions(); await refreshMessages(selected.id);
-      onNotify("Applied " + result.applied.length + " file(s) locally. Review Git diff and run checks before committing.");
-    } catch (e) { setError(e instanceof Error ? e.message : "Could not apply the proposed patch."); }
+      onNotify("Applied " + latestProposal.files.length + " reviewed change(s) to shared cloud files. The next role is queued.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not apply the cloud proposal."); }
     finally { setBusy(false); }
   }
 
-  async function queueNextStep(event: React.FormEvent<HTMLFormElement>) {
+  async function queueNextStep(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase || !selected || !["needs_review", "failed", "completed"].includes(selected.status)) return;
     setBusy(true); setError("");
@@ -249,7 +266,7 @@ export default function AgentConsole({ projectId, userId, accessToken, onNotify 
     onNotify("Agent session queued. Context and previous steps are preserved.");
   }
 
-  const providerLabel = providerNames.length ? providerNames.join(" · ") : "No model provider configured";
+  const providerLabel = providerNames.length ? providerNames.join(" · ") : "No server-side model provider configured";
   return <section className="agent-console">
     <div className="agent-console-header">
       <div>
@@ -258,7 +275,7 @@ export default function AgentConsole({ projectId, userId, accessToken, onNotify 
         <p>Planner, Coder, Reviewer and QA roles share one durable session. RELAY routes requests across the providers configured on this PC.</p>
       </div>
       <div className="agent-console-head-actions">
-        <div className={"agent-relay-state " + workerStatus}><span/>{workerStatus === "ready" ? "RELAY READY" : workerStatus === "needs-key" ? "ADD PROVIDER KEY" : workerStatus === "offline" ? "WORKER OFFLINE" : "CHECKING"}</div>
+        <div className={"agent-relay-state " + workerStatus}><span/>{workerStatus === "ready" ? "CLOUD AGENTS READY" : workerStatus === "needs-key" ? "ADD CLOUD MODEL KEY" : workerStatus === "offline" ? "CLOUD AGENTS OFFLINE" : "CHECKING"}</div>
         <button className="button secondary" onClick={() => void checkWorker()}><RefreshCw size={14}/> Check worker</button>
         <button className="button primary" onClick={() => setShowCreate(value => !value)}><Plus size={15}/> New agent session</button>
       </div>
@@ -266,8 +283,8 @@ export default function AgentConsole({ projectId, userId, accessToken, onNotify 
 
     <div className="agent-relay-info">
       <div className="agent-relay-icon"><Workflow size={17}/></div>
-      <div><strong>{workerStatus === "ready" ? "Provider routing available" : workerStatus === "needs-key" ? "RELAY is installed, but needs a provider key" : workerStatus === "offline" ? "Pair a local worker first" : "Checking local worker"}</strong><span>{workerMessage || providerLabel}. API keys stay on the worker PC; the browser only sends the current signed-in session and task context.</span></div>
-      <button className="text-action" onClick={() => window.dispatchEvent(new CustomEvent("continuum-open-local-ide"))}>Open Local IDE <ArrowUpRight size={14}/></button>
+      <div><strong>{workerStatus === "ready" ? "Cloud model routing available" : workerStatus === "needs-key" ? "Cloud agent needs a model provider" : workerStatus === "offline" ? "Connect cloud agent service" : "Checking local worker"}</strong><span>{workerMessage || providerLabel}. Provider API keys stay in Vercel environment variables; this browser sends only the signed-in user token and approved project context.</span></div>
+      <button className="text-action" onClick={() => window.dispatchEvent(new CustomEvent("continuum-open-local-ide"))}>Open desktop app <ArrowUpRight size={14}/></button>
     </div>
 
     {showCreate && <form className="agent-create-card" onSubmit={createSession}>
@@ -319,10 +336,10 @@ export default function AgentConsole({ projectId, userId, accessToken, onNotify 
           </div>
           {selected.status === "failed" && selected.last_error && <div className="agent-last-error"><AlertTriangle size={14}/><span>{selected.last_error}</span></div>}
           <div className="agent-detail-actions">
-            {selected.status === "queued" && <button className="button primary" onClick={() => void runStep()} disabled={busy || workerStatus !== "ready"}><Play size={14}/> Run next step on this PC</button>}
-            {selected.status === "needs_review" && latestProposal?.files?.length ? <button className="button primary" onClick={() => void applyProposal()} disabled={busy || workerStatus !== "ready"}><CheckCircle2 size={14}/> Apply proposed files locally</button> : null}
+            {selected.status === "queued" && <button className="button primary" onClick={() => void runStep()} disabled={busy || workerStatus !== "ready"}><Play size={14}/> Run next cloud step</button>}
+            {selected.status === "needs_review" && latestProposal?.files?.length ? <button className="button primary" onClick={() => void applyProposal()} disabled={busy || workerStatus !== "ready"}><CheckCircle2 size={14}/> Apply proposal to shared files</button> : null}
             {["needs_review", "failed", "completed"].includes(selected.status) && <form className="agent-continue-form" onSubmit={queueNextStep}><label>Continue / revise context<textarea rows={2} value={feedback} onChange={e => setFeedback(e.target.value)} placeholder="Optional feedback, test results, or next instruction…"/></label><button className="button secondary" type="submit" disabled={busy}><ArrowDownRight size={14}/>{selected.status === "failed" ? "Retry with saved context" : selected.status === "completed" ? "Reopen session" : "Queue next step"}</button></form>}
-            {selected.status === "running" && <div className="agent-running-note"><RefreshCw size={14}/> A local worker is handling this step. The previous context is saved in the cloud.</div>}
+            {selected.status === "running" && <div className="agent-running-note"><RefreshCw size={14}/> A cloud model is handling this step. Session status and message history are saved in the cloud.</div>}
           </div>
         </> : <div className="agent-session-empty"><div><Sparkles size={24}/></div><div className="section-kicker">AGENT CONTEXT</div><h3>Select a session<br/><em>or start with a goal.</em></h3><p>Each step is recorded, so you can switch provider, role, or PC without restating the project from scratch.</p><button className="button primary" onClick={() => setShowCreate(true)}><Plus size={15}/> New agent session</button></div>}
       </section>
