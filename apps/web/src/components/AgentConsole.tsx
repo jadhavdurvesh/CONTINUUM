@@ -35,26 +35,13 @@ type AgentMessage = {
   created_at: string;
 };
 type Props = { projectId: string; userId: string; accessToken: string; onNotify: (message: string) => void };
-type WorkerConfig = { url: string; token: string };
 type Proposal = { summary: string; files: { path: string; content: string }[]; next_role: AgentRole; status: string; review_notes?: string };
-const CONFIG_KEY = "continuum.local-worker.config";
 
 function roleName(role: string) {
   return ({ planner: "Planner", coder: "Coder", reviewer: "Reviewer", qa: "QA" } as Record<string, string>)[role] ?? role;
 }
 function statusName(status: string) {
   return ({ queued: "Queued", running: "Running", needs_review: "Review needed", completed: "Completed", failed: "Failed", cancelled: "Cancelled" } as Record<string, string>)[status] ?? status;
-}
-function loadWorkerConfig(): WorkerConfig | null {
-  try {
-    const raw = localStorage.getItem(CONFIG_KEY);
-    if (!raw) return null;
-    const value = JSON.parse(raw);
-    if (typeof value.url !== "string" || typeof value.token !== "string" || value.token.trim().length < 32) return null;
-    const parsed = new URL(value.url);
-    if (parsed.protocol !== "http:" || !["localhost", "127.0.0.1", "[::1]", "::1"].includes(parsed.hostname.toLowerCase()) || parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) return null;
-    return { url: parsed.origin, token: value.token.trim() };
-  } catch { return null; }
 }
 function proposalFrom(message?: AgentMessage): Proposal | null {
   if (!message || message.role !== "assistant") return null;
