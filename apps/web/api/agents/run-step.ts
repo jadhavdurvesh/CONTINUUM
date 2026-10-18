@@ -23,8 +23,16 @@ function parseJson(raw: string): AgentPayload {
     if (!path || path.startsWith("/") || path.split("/").some(part => !part || part === "." || part === "..") || /^[A-Za-z]:/.test(path)) {
       throw new Error("The proposal contains an unsafe relative path.");
     }
-    if (/(^|\/)(\.env($|\.)|\.ssh|\.aws|private|secrets?)(\/|$)/i.test(path) || /\.(pem|key|p12|pfx|keystore)$/i.test(path)) {
-      throw new Error("The proposal targets a credential or secret path, which is blocked.");
+    const parts = path.toLowerCase().split("/");
+    const blockedDirectories = new Set([".git", ".hg", ".svn", ".ssh", ".aws", ".azure", ".gnupg", ".venv", "venv", "node_modules", "private", "secret", "secrets"]);
+    const blockedFiles = new Set([".npmrc", ".pypirc", "credentials.json", "service-account.json", "id_rsa", "id_ed25519", "id_ecdsa"]);
+    const sensitive = parts.some(part =>
+      blockedDirectories.has(part) || blockedFiles.has(part) ||
+      part === ".env" || part.startsWith(".env.") ||
+      part.endsWith("_secret") || part.endsWith("_credentials")
+    ) || /\.(pem|key|p12|pfx|keystore)$/i.test(path);
+    if (sensitive) {
+      throw new Error("The proposal targets a credential, secret, generated, or dependency path, which is blocked.");
     }
     return { path, content: file.content.slice(0, 150000) };
   });
