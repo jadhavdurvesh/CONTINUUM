@@ -1018,3 +1018,6 @@ exception when duplicate_object then null;
 end;
 $$;
 -- END supabase/migrations/202610180003_agent_sessions.sql
+
+-- Ask PostgREST to reload its schema cache so the new tables become visible to the API.
+notify pgrst, 'reload schema';
