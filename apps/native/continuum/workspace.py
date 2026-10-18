@@ -44,6 +44,8 @@ def safe_file_path(root: str | Path, relative: str | Path, *, allow_sensitive: b
     candidate_input = Path(raw)
     if candidate_input.is_absolute() or any(part in {"..", "."} for part in candidate_input.parts):
         raise WorkspaceError("Only normalized relative paths inside the workspace are allowed.")
+    if any(part in IGNORED_DIRS for part in candidate_input.parts):
+        raise WorkspaceError("Generated, dependency, and version-control paths are not editable from the workspace editor.")
     if not allow_sensitive and is_sensitive_path(candidate_input):
         raise WorkspaceError("Secret and credential files are hidden from the workspace editor.")
     current = base
