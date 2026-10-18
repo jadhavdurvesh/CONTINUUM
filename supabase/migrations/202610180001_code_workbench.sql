@@ -11,6 +11,8 @@ create table public.code_files (
     and path not like '../%'
     and path not like '%/../%'
     and path not like '%/..'
+    and path !~ '(^|/)(\\.|\\.\\.)(/|$)'
+    and path not like '%//%'
   ),
   language text not null default 'plaintext',
   content text not null default '' check (octet_length(content) <= 1500000),
@@ -45,8 +47,7 @@ begin
       select 1 from public.resource_locks rl
       where rl.project_id=old.project_id and rl.resource_type='code_file'
         and rl.resource_id=old.id and rl.is_locked
-    ) and not private.is_project_owner(old.project_id)
-      and not private.has_resource_grant(old.project_id,'code_file',old.id,'delete') then
+    ) and not private.has_resource_grant(old.project_id,'code_file',old.id,'delete') then
       raise exception 'This code file is protected. Request permission or ask the owner to unlock it.'
         using errcode='42501';
     end if;
@@ -60,8 +61,7 @@ begin
         select 1 from public.resource_locks rl
         where rl.project_id=old.project_id and rl.resource_type='code_file'
           and rl.resource_id=old.id and rl.is_locked
-      ) and not private.is_project_owner(old.project_id)
-        and not private.has_resource_grant(old.project_id,'code_file',old.id,'edit') then
+      ) and not private.has_resource_grant(old.project_id,'code_file',old.id,'edit') then
         raise exception 'This code file is protected. Request permission or ask the owner to unlock it.'
           using errcode='42501';
       end if;

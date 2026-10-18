@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import {
-  Activity, ArrowDownRight, ArrowUpRight, Bell, BookOpen, Bot, Boxes,
+  Activity, ArrowDownRight, ArrowUpRight, Bell, BookOpen, Bot, Boxes, Code2,
   Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, Command,
   FileText, FlaskConical, HardDrive, LayoutGrid, LockKeyhole, LogOut,
   Menu, Plus, Radio, Search, Settings2, ShieldCheck, ShieldEllipsis,
   Target, Users, Workflow, X, Zap
 } from "lucide-react";
 import { cloudConfigured, supabase, type ActivityEvent, type Project, type Task } from "./lib/supabase";
+import CodeWorkbench from "./components/CodeWorkbench";
 
-type Page = "Overview" | "Tasks" | "Activity" | "Protected resources" | "Agents & workers" | "Documentation" | "Settings";
+type Page = "Overview" | "Tasks" | "Code Workbench" | "Activity" | "Protected resources" | "Agents & workers" | "Documentation" | "Settings";
 type TaskStatus = Task["status"];
 
 const statusLabels: Record<TaskStatus, string> = {
@@ -20,6 +21,7 @@ const statusOrder: TaskStatus[] = ["backlog", "todo", "in_progress", "in_review"
 const nav: { section: string; label: Page; icon: typeof LayoutGrid }[] = [
   { section: "PROJECT", label: "Overview", icon: LayoutGrid },
   { section: "PROJECT", label: "Tasks", icon: CheckCheck },
+  { section: "PROJECT", label: "Code Workbench", icon: Code2 },
   { section: "PROJECT", label: "Documentation", icon: BookOpen },
   { section: "SYSTEM", label: "Agents & workers", icon: Bot },
   { section: "SYSTEM", label: "Activity", icon: Activity },
@@ -288,6 +290,7 @@ function App() {
   const pageDescription: Record<Page, string> = {
     "Overview": "A live view of delivery, engineering health, and what needs attention.",
     "Tasks": "Track the work, the owner, and the next meaningful state change.",
+    "Code Workbench": "Edit shared source files with syntax highlighting, saved history, and change protection.",
     "Activity": "A chronological record of changes made by people and automation.",
     "Protected resources": "Explicit locks and permission requests for work that must not change casually.",
     "Agents & workers": "The cloud control plane for model routes, agent runs, and connected workstations.",
@@ -326,6 +329,7 @@ function App() {
 
         {loadError && <div className="inline-error"><ShieldEllipsis size={16}/><span>{loadError}</span></div>}
         {!project ? <section className="empty-project panel"><div className="empty-stamp"><Boxes size={24}/></div><div className="eyebrow">NO PROJECT SELECTED</div><h2>Give the work a home.</h2><p>Create your first shared project. Its tasks, decisions, audit history, locks, and agent activity will live in the cloud—not in a single PC or chat.</p><button className="button primary" onClick={() => setShowProjectForm(true)}><Plus size={16}/> Create the first project</button></section> :
+        page === "Code Workbench" ? <CodeWorkbench key={project.id} projectId={project.id} userId={currentUserId ?? ""} isOwner={isOwner} onNotify={notify}/> :
         page === "Overview" ? <>
           <div className="overview-ribbon"><div className="ribbon-copy"><div className="ribbon-icon"><Zap size={17}/></div><div><strong>{project.name}</strong><span>{project.description || "Shared project space"} · Live workspace</span></div></div><div className="ribbon-meta"><span><Users size={15}/> Shared with your team</span><span><Clock3 size={15}/> Updated live</span></div></div>
           <div className="metric-grid">
