@@ -259,18 +259,18 @@ export default function AgentConsole({ projectId, userId, accessToken, onNotify 
       <div>
         <div className="section-kicker">PERSISTENT AGENT WORKSPACE</div>
         <h2>Work continues <em>with context.</em></h2>
-        <p>Planner, Coder, Reviewer and QA roles share one durable session. RELAY routes requests across the providers configured on this PC.</p>
+        <p>Planner, Coder, Reviewer and QA roles share one durable session. The hosted service routes model requests across providers configured in Vercel.</p>
       </div>
       <div className="agent-console-head-actions">
         <div className={"agent-relay-state " + workerStatus}><span/>{workerStatus === "ready" ? "CLOUD AGENTS READY" : workerStatus === "needs-key" ? "ADD CLOUD MODEL KEY" : workerStatus === "offline" ? "CLOUD AGENTS OFFLINE" : "CHECKING"}</div>
-        <button className="button secondary" onClick={() => void checkWorker()}><RefreshCw size={14}/> Check worker</button>
+        <button className="button secondary" onClick={() => void checkWorker()}><RefreshCw size={14}/> Check cloud service</button>
         <button className="button primary" onClick={() => setShowCreate(value => !value)}><Plus size={15}/> New agent session</button>
       </div>
     </div>
 
     <div className="agent-relay-info">
       <div className="agent-relay-icon"><Workflow size={17}/></div>
-      <div><strong>{workerStatus === "ready" ? "Cloud model routing available" : workerStatus === "needs-key" ? "Cloud agent needs a model provider" : workerStatus === "offline" ? "Connect cloud agent service" : "Checking local worker"}</strong><span>{workerMessage || providerLabel}. Provider API keys stay in Vercel environment variables; this browser sends only the signed-in user token and approved project context.</span></div>
+      <div><strong>{workerStatus === "ready" ? "Cloud model routing available" : workerStatus === "needs-key" ? "Cloud agent needs a model provider" : workerStatus === "offline" ? "Connect cloud agent service" : "Checking cloud agent service"}</strong><span>{workerMessage || providerLabel}. Provider API keys stay in Vercel environment variables; this browser sends only the signed-in user token and approved project context.</span></div>
       <button className="text-action" onClick={() => window.dispatchEvent(new CustomEvent("continuum-open-local-ide"))}>Open desktop app <ArrowUpRight size={14}/></button>
     </div>
 
@@ -283,7 +283,7 @@ export default function AgentConsole({ projectId, userId, accessToken, onNotify 
         <label className="agent-path-label">Focus file paths <small>One relative path per line; leave blank for key project manifests.</small><textarea rows={3} value={focusPaths} onChange={e => setFocusPaths(e.target.value)} placeholder={"apps/web/src/App.tsx\nservices/api/app/main.py"}/></label>
         <label className="agent-goal-label">Goal and acceptance criteria<textarea rows={5} required value={goal} onChange={e => setGoal(e.target.value)} placeholder="Describe the outcome, constraints, tests to add, and what must not change."/></label>
       </div>
-      <div className="agent-create-footer"><span><ShieldCheck size={14}/> Changes are proposed first. Protected paths are checked by the worker before apply.</span><button className="button primary" type="submit" disabled={busy}><Plus size={14}/> Queue session</button></div>
+      <div className="agent-create-footer"><span><ShieldCheck size={14}/> Changes are proposed first. Shared file permissions and protected-path rules are enforced by Supabase.</span><button className="button primary" type="submit" disabled={busy}><Plus size={14}/> Queue session</button></div>
     </form>}
 
     {error && <div className="inline-error"><AlertTriangle size={15}/><span>{error}</span><button className="icon-quiet" onClick={() => setError("")} aria-label="Dismiss"><X size={14}/></button></div>}
@@ -310,7 +310,7 @@ export default function AgentConsole({ projectId, userId, accessToken, onNotify 
               return <article className={"agent-message " + message.role} key={message.id}>
                 <div className="agent-message-avatar">{message.role === "assistant" ? <Bot size={15}/> : message.role === "tool" ? <Terminal size={14}/> : <Circle size={10}/>}</div>
                 <div className="agent-message-body">
-                  <div className="agent-message-meta"><strong>{message.role === "assistant" ? "RELAY agent" : message.role === "tool" ? "Worker record" : message.role === "system" ? "System" : message.actor_id === userId ? "You" : "Collaborator"}</strong><span>{new Date(message.created_at).toLocaleString()}</span>{message.metadata?.provider && <span>{message.metadata.provider}{message.metadata.model ? " / " + message.metadata.model : ""}{message.metadata.fallback_used ? " · fallback" : ""}</span>}</div>
+                  <div className="agent-message-meta"><strong>{message.role === "assistant" ? "Cloud agent" : message.role === "tool" ? "Tool record" : message.role === "system" ? "System" : message.actor_id === userId ? "You" : "Collaborator"}</strong><span>{new Date(message.created_at).toLocaleString()}</span>{message.metadata?.provider && <span>{message.metadata.provider}{message.metadata.model ? " / " + message.metadata.model : ""}{message.metadata.fallback_used ? " · fallback" : ""}</span>}</div>
                   {payload ? <>
                     <p>{payload.summary}</p>
                     {payload.review_notes && <p className="agent-review-notes">{payload.review_notes}</p>}
