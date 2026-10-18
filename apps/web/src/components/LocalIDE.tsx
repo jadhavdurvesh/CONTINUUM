@@ -8,7 +8,7 @@ import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
 import { python } from "@codemirror/lang-python";
 import { EditorView } from "@codemirror/view";
-import { AlertTriangle, Check, ChevronRight, Code2, FileCode2, FilePlus2, GitBranch, GitCommit, GitCompare, Play, RefreshCw, Save, Search, Settings2, ShieldCheck, Terminal, X } from "lucide-react";
+import { AlertTriangle, ChevronRight, Code2, FileCode2, FilePlus2, GitBranch, GitCommit, GitCompare, Play, RefreshCw, Save, Search, Settings2, ShieldCheck, Terminal, X } from "lucide-react";
 
 type LocalFile = { path: string; size: number; extension: string };
 type Reply = { exit_code?: number; output?: string; truncated?: boolean; detail?: string };
@@ -186,7 +186,7 @@ export default function LocalIDE() {
     const path = window.prompt("New relative file path (example: src/main.py)");
     if (!path?.trim()) return;
     try {
-      await api("/api/worker/file", { method: "PUT", body: JSON.stringify({ path: path.trim(), content: "" }) });
+      await api("/api/worker/file", { method: "POST", body: JSON.stringify({ path: path.trim(), content: "" }) });
       await refreshFiles(false);
       setSelectedPath(path.trim()); setDraft(""); setSavedContent("");
     } catch (e) { setError(e instanceof Error ? e.message : "Could not create file."); }

@@ -47,6 +47,16 @@ def test_writes_only_inside_workspace(tmp_path: Path):
     response = client.put("/api/worker/file", headers=auth(), json={"path": "src/new.py", "content": "print('ok')"})
     assert response.status_code == 200
     assert (tmp_path / "src" / "new.py").read_text(encoding="utf-8") == "print('ok')"
+    response2 = client.put("/api/worker/file", headers=auth(), json={"path": "src/new.py", "content": "print('updated')"})
+    assert response2.status_code == 200
+    assert (tmp_path / "src" / "new.py").read_text(encoding="utf-8") == "print('updated')"
+
+def test_create_endpoint_never_overwrites_existing_file(tmp_path: Path):
+    created = client.post("/api/worker/file", headers=auth(), json={"path": "fresh.py", "content": "print('fresh')"})
+    assert created.status_code == 200
+    conflict = client.post("/api/worker/file", headers=auth(), json={"path": "fresh.py", "content": "overwrite"})
+    assert conflict.status_code == 409
+    assert (tmp_path / "fresh.py").read_text(encoding="utf-8") == "print('fresh')"
 
 def test_shell_chaining_and_unapproved_commands_are_rejected():
     for command in (["python", "-c", "import os"], ["npm", "run", "build", "&&", "whoami"], ["curl", "https://example.com"]):
@@ -60,3 +70,20 @@ def test_cors_allows_only_configured_origin():
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
     assert response.headers.get("access-control-allow-credentials") != "true"
+
+def test_private_network_header_only_for_configured_origin():
+    allowed = client.options("/api/worker/files", headers={
+        "Origin": "http://localhost:5173",
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "authorization",
+        "Access-Control-Request-Private-Network": "true",
+    })
+    assert allowed.status_code == 200
+    assert allowed.headers.get("access-control-allow-private-network") == "true"
+    denied = client.options("/api/worker/files", headers={
+        "Origin": "https://untrusted.example",
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "authorization",
+        "Access-Control-Request-Private-Network": "true",
+    })
+    assert denied.headers.get("access-control-allow-private-network") is None

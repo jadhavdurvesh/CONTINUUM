@@ -42,7 +42,7 @@ The hosted website must be included in CONTINUUM_ALLOWED_ORIGINS before cross-or
 
 - The server binds to 127.0.0.1; do not change it to 0.0.0.0.
 - Workspace endpoints require a random bearer token at least 32 characters long.
-- Only configured origins are allowed; browser credentials are not sent.
+- Only configured origins are allowed; browser credentials are not sent. The worker opts approved origins into private-network preflights required by some browsers.
 - File paths are confined to the configured root; traversal and symlinks are rejected.
 - .env files, private keys, common generated directories, and files over 1.5 MB are excluded.
 - Commands are argument arrays, never shell strings. Only approved build/test/lint/typecheck, pytest, compileall, and read-only Git commands are accepted.
