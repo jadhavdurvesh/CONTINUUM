@@ -675,12 +675,17 @@ class ContinuumWindow(QMainWindow):
 
     def apply_agent_proposal(self):
         session = self.active_session
-        if not session or not self.workspace:
-            QMessageBox.information(self, "Open a project folder", "Open a local workspace before applying code proposals.")
+        project_id = self.selected_project_id()
+        if not session or not project_id or not self.workspace:
+            QMessageBox.information(self, "Open a project folder", "Open a local workspace and select a cloud project before applying code proposals.")
             return
         if not self.messages:
-            self.messages = self.cloud.messages(self.selected_project_id(), str(session.get("id")))
-        latest = next((m for m in reversed(self.messages) if m.get("role") == "assistant"), None)
+            try:
+                self.messages = self.cloud.messages(project_id, str(session.get("id")))
+            except CloudError as error:
+                QMessageBox.warning(self, "Could not load proposal", str(error))
+                return
+        latest = next((message for message in reversed(self.messages) if message.get("role") == "assistant"), None)
         if not latest:
             return
         try:
@@ -689,31 +694,58 @@ class ContinuumWindow(QMainWindow):
             if not isinstance(files, list) or not files:
                 QMessageBox.information(self, "No file changes", "The latest agent step did not propose source-file changes.")
                 return
-            answer = QMessageBox.question(self, "Review proposed changes", "Apply " + str(len(files)) + " proposed file(s) to\n" + str(self.workspace) + "?\n\nExisting files will be backed up first. This will not commit, push, or deploy.")
+            answer = QMessageBox.question(
+                self, "Review proposed changes",
+                "Apply " + str(len(files)) + " proposed file(s) to\n" + str(self.workspace) +
+                "?\n\nAll paths and cloud locks will be checked first. Existing files will be backed up. "
+                "If any write fails, already changed files will be restored. This will not commit, push, or deploy."
+            )
             if answer != QMessageBox.StandardButton.Yes:
                 return
+
             backups = user_data_dir()
-            applied: list[str] = []
+            prepared: list[tuple[str, Path, bytes, bytes | None]] = []
+            seen: set[str] = set()
+
+            # Preflight the whole proposal before touching any files.
             for item in files:
-                relative = str(item["path"])
-                content = item["content"]
-                if not isinstance(content, str):
-                    raise WorkspaceError("A proposed file contained invalid text.")
+                if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not isinstance(item.get("content"), str):
+                    raise WorkspaceError("A proposed change is malformed.")
+                relative = item["path"].replace("\\", "/").strip()
+                if not relative or relative in seen:
+                    raise WorkspaceError("The proposal contains an empty or duplicate path: " + relative)
+                seen.add(relative)
                 target = safe_file_path(self.workspace, relative)
-                self.cloud.assert_file_editable(self.selected_project_id(), relative)
-                encoded = content.encode("utf-8")
+                self.cloud.assert_file_editable(project_id, relative)
+                encoded = item["content"].encode("utf-8")
                 if len(encoded) > MAX_TEXT_BYTES:
                     raise WorkspaceError("Proposed files are limited to 2 MiB each.")
-                target.parent.mkdir(parents=True, exist_ok=True)
+                original: bytes | None = None
                 if target.exists():
-                    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-                    backup = backups / stamp / relative
+                    if not target.is_file():
+                        raise WorkspaceError("A proposed file path already exists as a non-file: " + relative)
+                    if target.stat().st_size > MAX_TEXT_BYTES:
+                        raise WorkspaceError("Existing files larger than 2 MiB cannot be replaced by an agent proposal: " + relative)
+                    original = target.read_bytes()
+                prepared.append((relative, target, encoded, original))
+
+            stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+            backup_root = backups / stamp
+            # Persist backups for every existing file before the first replacement.
+            for relative, _target, _encoded, original in prepared:
+                if original is not None:
+                    backup = backup_root / relative
                     backup.parent.mkdir(parents=True, exist_ok=True)
-                    backup.write_bytes(target.read_bytes())
+                    backup.write_bytes(original)
+
+            applied: list[tuple[str, Path, bytes | None]] = []
+
+            def atomic_write(target: Path, data: bytes) -> None:
+                target.parent.mkdir(parents=True, exist_ok=True)
                 fd, temp_name = tempfile.mkstemp(prefix=".continuum-agent-", dir=str(target.parent))
                 try:
                     with os.fdopen(fd, "wb") as handle:
-                        handle.write(encoded)
+                        handle.write(data)
                     os.replace(temp_name, target)
                 except Exception:
                     try:
@@ -721,12 +753,40 @@ class ContinuumWindow(QMainWindow):
                     except OSError:
                         pass
                     raise
-                applied.append(relative)
+
+            try:
+                for relative, target, encoded, original in prepared:
+                    atomic_write(target, encoded)
+                    applied.append((relative, target, original))
+            except Exception as apply_error:
+                rollback_failures: list[str] = []
+                for relative, target, original in reversed(applied):
+                    try:
+                        if original is None:
+                            target.unlink(missing_ok=True)
+                        else:
+                            atomic_write(target, original)
+                    except Exception as rollback_error:
+                        rollback_failures.append(relative + ": " + str(rollback_error))
+                if rollback_failures:
+                    raise WorkspaceError(
+                        "Applying the proposal failed and rollback was incomplete. "
+                        "Recovery backups are in " + str(backup_root) + ". Failed paths: " +
+                        "; ".join(rollback_failures)
+                    ) from apply_error
+                raise WorkspaceError(
+                    "Applying the proposal failed; all earlier file changes were rolled back."
+                ) from apply_error
+
             self.refresh_tree()
-            for relative in applied:
-                self.open_file(self.workspace / relative)
-            QMessageBox.information(self, "Proposal applied", "Updated:\n" + "\n".join(applied) + "\n\nReview the diff and run tests before committing.")
-            self.statusBar().showMessage("Applied " + str(len(applied)) + " reviewed file(s).", 7000)
+            for relative, _target, _encoded, _original in prepared:
+                self.open_file(self.workspace / Path(relative))
+            QMessageBox.information(
+                self, "Proposal applied",
+                "Updated " + str(len(prepared)) + " file(s).\n\nExisting-file backups are stored in:\n" +
+                str(backup_root) + "\n\nReview the changes and run tests before committing."
+            )
+            self.statusBar().showMessage("Applied " + str(len(prepared)) + " reviewed file(s).", 7000)
             self.refresh_sessions(str(session.get("id")))
         except (CloudError, WorkspaceError, OSError, ValueError, KeyError, TypeError) as error:
             QMessageBox.critical(self, "Could not apply proposal", str(error))
