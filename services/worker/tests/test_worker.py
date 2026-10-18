@@ -3,6 +3,7 @@ import pytest
 from fastapi.testclient import TestClient
 from fastapi import HTTPException
 from app.main import APP, safe_path, checked_command
+import app.main as worker_module
 
 client = TestClient(APP)
 
@@ -11,6 +12,7 @@ def worker_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("CONTINUUM_WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("CONTINUUM_WORKER_TOKEN", "test-token-" + "x" * 40)
     monkeypatch.setenv("CONTINUUM_ALLOWED_ORIGINS", "http://localhost:5173")
+    monkeypatch.setattr(worker_module, "assert_path_editable", lambda *args, **kwargs: None)
     (tmp_path / "hello.py").write_text("print('hello')\n", encoding="utf-8")
     (tmp_path / ".env").write_text("SECRET=do-not-show\n", encoding="utf-8")
     (tmp_path / "node_modules").mkdir()
@@ -86,4 +88,13 @@ def test_private_network_header_only_for_configured_origin():
         "Access-Control-Request-Headers": "authorization",
         "Access-Control-Request-Private-Network": "true",
     })
-    assert denied.headers.get("access-control-allow-private-network") is None
+    assert denied.status_code == 400
+    assert denied.headers.get("access-control-allow-origin") is None
+
+def test_cloud_path_guard_rejects_locked_file_before_local_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def block(*args, **kwargs):
+        raise HTTPException(423, 'protected in cloud')
+    monkeypatch.setattr(worker_module, 'assert_path_editable', block)
+    response = client.put('/api/worker/file', headers=auth(), json={'path':'hello.py','content':'changed'})
+    assert response.status_code == 423
+    assert (tmp_path / 'hello.py').read_text(encoding='utf-8') == "print('hello')\n"

@@ -4,12 +4,18 @@ Set CONTINUUM_WORKSPACE_ROOT and a random CONTINUUM_WORKER_TOKEN first.
 """
 from __future__ import annotations
 import hmac
+import json as _json
 import os
 import re
 import subprocess
 import os as _os
 import tempfile
+import uuid as _uuid
+from datetime import datetime, timezone
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode, urlparse
+from urllib.request import Request, urlopen
 from typing import Annotated
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,18 +28,7 @@ IGNORED = {".git", "node_modules", ".venv", "venv", "__pycache__", ".next", "dis
 SECRETS = {".env", ".env.local", ".env.production", ".env.development", ".npmrc", ".pypirc", "credentials.json", "secrets.json", "id_rsa", "id_ed25519"}
 SECRET_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".keystore"}
 origins = [x.strip().rstrip("/") for x in os.getenv("CONTINUUM_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if x.strip()]
-APP.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST", "PUT", "OPTIONS"], allow_headers=["Authorization", "Content-Type"], allow_private_network=True, max_age=600)
-
-@APP.middleware("http")
-async def allow_private_network_access_for_approved_origins(request, call_next):
-    # HTTPS-hosted browser frontends may preflight requests to a loopback worker.
-    # Only echo this opt-in for origins explicitly configured by the operator.
-    response = await call_next(request)
-    origin = request.headers.get("origin", "").rstrip("/")
-    wants_local_network = request.headers.get("access-control-request-private-network", "").lower() == "true"
-    if wants_local_network and origin in origins:
-        response.headers["Access-Control-Allow-Private-Network"] = "true"
-    return response
+APP.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST", "PUT", "OPTIONS"], allow_headers=["Authorization", "Content-Type", "X-Continuum-Project-Id", "X-Continuum-User-Token"], allow_private_network=True, max_age=600)
 
 def root_path() -> Path:
     raw = os.getenv("CONTINUUM_WORKSPACE_ROOT", "").strip()
@@ -110,6 +105,64 @@ def checked_command(command: list[str]) -> tuple[list[str], int]:
         return [exe, *args], 15
     raise HTTPException(403, "Command not allowed. Allowed: build/test/lint/typecheck, pytest, compileall, and read-only Git status/diff/log/branch.")
 
+def cloud_json(path: str, user_token: str):
+    base = os.getenv('CONTINUUM_SUPABASE_URL', '').strip().rstrip('/')
+    public_key = os.getenv('CONTINUUM_SUPABASE_PUBLISHABLE_KEY', '').strip()
+    if not base or not public_key:
+        raise HTTPException(503, 'Set CONTINUUM_SUPABASE_URL and CONTINUUM_SUPABASE_PUBLISHABLE_KEY so repository locks can be enforced.')
+    parsed = urlparse(base)
+    local_host = parsed.hostname in {'localhost', '127.0.0.1', '::1'}
+    if parsed.scheme != 'https' and not (parsed.scheme == 'http' and local_host):
+        raise HTTPException(503, 'Cloud permission checks require HTTPS except for local development.')
+    if parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in {'', '/'}:
+        raise HTTPException(503, 'CONTINUUM_SUPABASE_URL must be a project origin, without a path or credentials.')
+    request = Request(base + path, headers={'apikey': public_key, 'Authorization': 'Bearer ' + user_token, 'Accept': 'application/json'})
+    try:
+        with urlopen(request, timeout=8) as response:
+            return _json.loads(response.read().decode('utf-8'))
+    except HTTPError as exc:
+        if exc.code == 401:
+            raise HTTPException(401, 'Cloud session expired. Sign in again to continue editing.') from exc
+        if exc.code == 403:
+            raise HTTPException(403, 'Cloud permission check was denied.') from exc
+        raise HTTPException(503, 'Could not verify repository permissions with the cloud backend.') from exc
+    except (URLError, TimeoutError, ValueError) as exc:
+        raise HTTPException(503, 'Could not reach the cloud backend to verify repository permissions.') from exc
+
+def assert_path_editable(project_id: str | None, path: str, user_token: str | None) -> None:
+    if not project_id or not user_token:
+        raise HTTPException(401, 'A signed-in workspace session is required for local file writes.')
+    try:
+        project_uuid = str(_uuid.UUID(project_id))
+    except ValueError as exc:
+        raise HTTPException(400, 'A valid workspace project ID is required.') from exc
+    identity = cloud_json('/auth/v1/user', user_token)
+    user_id = identity.get('id') if isinstance(identity, dict) else None
+    if not user_id:
+        raise HTTPException(401, 'Cloud session is missing or expired.')
+    member_query = urlencode({'select':'user_id', 'project_id':'eq.' + project_uuid, 'user_id':'eq.' + user_id, 'limit':'1'})
+    membership = cloud_json('/rest/v1/project_members?' + member_query, user_token)
+    if not isinstance(membership, list) or not membership:
+        raise HTTPException(403, 'This account is not a member of the selected cloud project.')
+    lock_query = urlencode({'select':'id,path,reason', 'project_id':'eq.' + project_uuid, 'path':'eq.' + safe_path(path), 'is_locked':'eq.true', 'limit':'1'})
+    lock_rows = cloud_json('/rest/v1/repository_path_locks?' + lock_query, user_token)
+    if not isinstance(lock_rows, list) or not lock_rows:
+        return
+    lock_row = lock_rows[0]
+    grant_query = urlencode({'select':'expires_at', 'project_id':'eq.' + project_uuid, 'resource_type':'eq.local_file', 'resource_id':'eq.' + lock_row['id'], 'user_id':'eq.' + user_id, 'permitted_action':'eq.edit', 'revoked_at':'is.null'})
+    grants = cloud_json('/rest/v1/permission_grants?' + grant_query, user_token)
+    now = datetime.now(timezone.utc)
+    for grant in grants if isinstance(grants, list) else []:
+        expires = grant.get('expires_at')
+        if not expires:
+            return
+        try:
+            if datetime.fromisoformat(expires.replace('Z', '+00:00')) > now:
+                return
+        except (ValueError, TypeError):
+            continue
+    raise HTTPException(423, 'This file is protected in the shared workspace. Ask the owner to unlock it or grant temporary edit access.')
+
 class FileWrite(BaseModel):
     path: str = Field(min_length=1, max_length=240)
     content: str = Field(max_length=1_500_000)
@@ -164,7 +217,7 @@ def read_file(path: Annotated[str, Query(min_length=1, max_length=240)]) -> dict
     return {"path": safe_path(path), "content": content, "size": target.stat().st_size}
 
 @APP.put("/api/worker/file", dependencies=[Depends(require_token)])
-def write_file(body: FileWrite) -> dict:
+def write_file(body: FileWrite, x_continuum_project_id: Annotated[str | None, Header()] = None, x_continuum_user_token: Annotated[str | None, Header()] = None) -> dict:
     root = root_path()
     target = resolve_path(root, body.path)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -173,6 +226,7 @@ def write_file(body: FileWrite) -> dict:
         raise HTTPException(400, "Path is not a file.")
     if len(body.content.encode("utf-8")) > MAX_FILE_BYTES:
         raise HTTPException(413, "File exceeds the 1.5 MB limit.")
+    assert_path_editable(x_continuum_project_id, body.path, x_continuum_user_token)
     temp_name = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=target.parent, prefix=".continuum-", suffix=".tmp", delete=False) as temp:
@@ -185,13 +239,14 @@ def write_file(body: FileWrite) -> dict:
     return {"path": safe_path(body.path), "size": target.stat().st_size, "saved": True}
 
 @APP.post("/api/worker/file", dependencies=[Depends(require_token)])
-def create_file(body: FileWrite) -> dict:
+def create_file(body: FileWrite, x_continuum_project_id: Annotated[str | None, Header()] = None, x_continuum_user_token: Annotated[str | None, Header()] = None) -> dict:
     root = root_path()
     target = resolve_path(root, body.path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target = resolve_path(root, body.path)
     if len(body.content.encode("utf-8")) > MAX_FILE_BYTES:
         raise HTTPException(413, "File exceeds the 1.5 MB limit.")
+    assert_path_editable(x_continuum_project_id, body.path, x_continuum_user_token)
     try:
         with target.open("x", encoding="utf-8", newline="") as handle:
             handle.write(body.content)
@@ -213,7 +268,7 @@ def run(body: CommandRequest) -> dict:
     return run_process(args, root_path(), timeout)
 
 @APP.post("/api/worker/git/commit", dependencies=[Depends(require_token)])
-def commit(body: CommitRequest) -> dict:
+def commit(body: CommitRequest, x_continuum_project_id: Annotated[str | None, Header()] = None, x_continuum_user_token: Annotated[str | None, Header()] = None) -> dict:
     root = root_path()
     message = body.message.strip()
     if not message or "\n" in message or "\r" in message:
@@ -221,6 +276,7 @@ def commit(body: CommitRequest) -> dict:
     paths = list(dict.fromkeys(safe_path(p) for p in body.paths))
     for path in paths:
         resolve_path(root, path, True)
+        assert_path_editable(x_continuum_project_id, path, x_continuum_user_token)
     staged = run_process(["git", "diff", "--cached", "--"], root, 10)
     if staged["exit_code"] != 0:
         return staged
