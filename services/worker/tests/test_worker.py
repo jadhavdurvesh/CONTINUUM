@@ -5,7 +5,6 @@ from fastapi import HTTPException
 from app.main import APP, safe_path, checked_command
 from app.agent_runtime import parse_agent_payload
 import app.main as worker_module
-import app.main as worker_module
 
 client = TestClient(APP)
 
@@ -14,7 +13,6 @@ def worker_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("CONTINUUM_WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("CONTINUUM_WORKER_TOKEN", "test-token-" + "x" * 40)
     monkeypatch.setenv("CONTINUUM_ALLOWED_ORIGINS", "http://localhost:5173")
-    monkeypatch.setattr(worker_module, "assert_path_editable", lambda *args, **kwargs: None)
     monkeypatch.setattr(worker_module, "assert_path_editable", lambda *args, **kwargs: None)
     (tmp_path / "hello.py").write_text("print('hello')\n", encoding="utf-8")
     (tmp_path / ".env").write_text("SECRET=do-not-show\n", encoding="utf-8")
