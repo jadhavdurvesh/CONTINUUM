@@ -3,6 +3,7 @@ import pytest
 from fastapi.testclient import TestClient
 from fastapi import HTTPException
 from app.main import APP, safe_path, checked_command
+from app.agent_runtime import parse_agent_payload
 import app.main as worker_module
 import app.main as worker_module
 
@@ -100,3 +101,22 @@ def test_cloud_path_guard_rejects_locked_file_before_local_write(tmp_path: Path,
     response = client.put('/api/worker/file', headers=auth(), json={'path':'hello.py','content':'changed'})
     assert response.status_code == 423
     assert (tmp_path / 'hello.py').read_text(encoding='utf-8') == "print('hello')\n"
+
+
+def test_agent_payload_parser_accepts_valid_proposal_and_normalizes_fields():
+    data = parse_agent_payload('{"summary":"Plan complete","files":[{"path":"src/main.py","content":"print(1)"}],"next_role":"reviewer","status":"needs_review","review_notes":"Review test coverage"}')
+    assert data["summary"] == "Plan complete"
+    assert data["files"][0]["path"] == "src/main.py"
+    assert data["next_role"] == "reviewer"
+    assert data["status"] == "needs_review"
+
+def test_agent_payload_parser_rejects_invalid_file_entries():
+    with pytest.raises(ValueError):
+        parse_agent_payload('{"summary":"oops","files":[{"path":"x.py"}]}')
+
+def test_agent_payload_parser_accepts_fenced_json():
+    fence = chr(96) * 3
+    raw = fence + 'json\n{"summary":"hello","files":[],"next_role":"coder","status":"queued"}\n' + fence
+    data = parse_agent_payload(raw)
+    assert data["summary"] == "hello"
+    assert data["next_role"] == "coder"
