@@ -40,3 +40,10 @@ apps/web/.env.local
 apps/desktop/renderer/
 apps/desktop/LICENSE
 apps/desktop/release/
+
+# Native desktop build outputs and generated release configuration
+apps/native/.venv/
+apps/native/build/
+apps/native/dist/
+apps/native/release/
+apps/native/continuum/_release_cloud_config.py
