@@ -8,7 +8,8 @@ from continuum.workspace import WorkspaceError, safe_file_path, should_ignore_pa
 class WorkspaceSafetyTests(unittest.TestCase):
     def test_normal_relative_path_is_resolved_inside_workspace(self):
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
+            # Windows may expose TEMP through a path alias; workspace helpers resolve it.
+            root = Path(folder).resolve()
             (root / "src").mkdir()
             target = safe_file_path(root, "src/main.py")
             self.assertEqual(target, root / "src" / "main.py")
