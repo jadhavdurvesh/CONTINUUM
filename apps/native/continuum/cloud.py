@@ -187,13 +187,39 @@ class CloudClient:
         }, prefer="return=minimal")
         return session
 
-    def run_step(self, project_id: str, session_id: str) -> dict[str, Any]:
+    def run_step(self, project_id: str, session_id: str, workspace_context: list[dict[str, str]] | None = None) -> dict[str, Any]:
         url = self.api_url + "/api/agents/run-step"
-        result = self._open(url, "POST", {"project_id": project_id, "session_id": session_id},
-                            headers={"Authorization": "Bearer " + self.access_token}, timeout=60)
+        result = self._open(
+            url, "POST",
+            {"project_id": project_id, "session_id": session_id,
+             "workspace_context": (workspace_context or [])[:12]},
+            timeout=65,
+        )
         if not isinstance(result, dict):
             raise CloudError("The cloud agent service returned an invalid response.")
         return result
+
+    def continue_session(self, project_id: str, session: dict[str, Any], feedback: str) -> None:
+        session_id = str(session.get("id", ""))
+        if not session_id or not self.user:
+            raise CloudError("Select a valid session and sign in again.")
+        if feedback.strip():
+            self._rest("agent_messages", method="POST", payload={
+                "project_id": project_id, "session_id": session_id,
+                "role": "user", "actor_type": "human",
+                "actor_id": str(self.user.get("id")), "content": feedback.strip()[:20000],
+                "metadata": {"handoff_feedback": True},
+            }, prefer="return=minimal")
+        checkpoint = session.get("checkpoint") if isinstance(session.get("checkpoint"), dict) else {}
+        next_role = checkpoint.get("next_role") or session.get("current_agent") or "planner"
+        if next_role not in {"planner", "coder", "reviewer", "qa"}:
+            next_role = "planner"
+        self._rest("agent_sessions", {
+            "id": "eq." + session_id, "project_id": "eq." + project_id,
+        }, "PATCH", {
+            "status": "queued", "current_agent": next_role,
+            "last_error": None, "finished_at": None,
+        }, "return=minimal")
 
     def assert_file_editable(self, project_id: str, relative_path: str) -> None:
         """Fail closed when a shared path is locked and this user has no grant."""
