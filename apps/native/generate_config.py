@@ -16,7 +16,7 @@ def main():
             raise SystemExit(label + " must be a valid HTTPS URL.")
     if key.lower().startswith("service_role") or "secret" in key.lower():
         raise SystemExit("Only the public Supabase publishable/anon key may ship in the desktop app.")
-    target = Path(__file__).parent / "continuum" / "cloud_config.py"
+    target = Path(__file__).parent / "continuum" / "_release_cloud_config.py"
     target.write_text(
         '"""Generated during native desktop packaging. Do not hand-edit."""\n'
         + "SUPABASE_URL = " + repr(supabase) + "\n"
