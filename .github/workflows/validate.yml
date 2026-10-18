@@ -23,6 +23,11 @@ jobs:
       - name: Type-check and build dashboard
         working-directory: apps/web
         run: npm run build
+      - name: Transpile-check Vercel API functions
+        working-directory: apps/web
+        run: |
+          npx esbuild api/agents/status.ts --platform=node --format=esm --outfile=/tmp/agents-status.mjs
+          npx esbuild api/agents/run-step.ts --platform=node --format=esm --outfile=/tmp/agents-run-step.mjs
 
   native:
     runs-on: ubuntu-latest
