@@ -1,8 +1,4 @@
-"""Generated cloud endpoints for packaged builds.
-
-This checked-in version intentionally contains no credentials. The installer
-workflow replaces these constants from GitHub Actions secrets before packaging.
-"""
+"""Generated during packaging. Values in this source file are intentionally blank."""
 SUPABASE_URL = ""
 SUPABASE_PUBLISHABLE_KEY = ""
 CLOUD_API_URL = ""
