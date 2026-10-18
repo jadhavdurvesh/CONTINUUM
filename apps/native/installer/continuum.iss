@@ -13,7 +13,6 @@ DefaultGroupName=CONTINUUM
 UninstallDisplayIcon={app}\{#MyAppExeName}
 OutputDir=..\release
 OutputBaseFilename=CONTINUUM-Setup-{#MyAppVersion}
-SetupIconFile=..\assets\continuum.ico
 LicenseFile=..\..\..\LICENSE
 PrivilegesRequired=lowest
 ArchitecturesInstallIn64BitMode=x64
