@@ -12,6 +12,7 @@ From the repository root, run:
     python -m pip install -e ".[dev]"
     $env:CONTINUUM_WORKSPACE_ROOT = "C:\path\to\your\checkout"
     $env:CONTINUUM_WORKER_TOKEN = (python -c "import secrets; print(secrets.token_urlsafe(40))")
+    Write-Host "Pairing token: $env:CONTINUUM_WORKER_TOKEN"
     $env:CONTINUUM_SUPABASE_URL = "https://YOUR_PROJECT_REF.supabase.co"
     $env:CONTINUUM_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_..."
     $env:CONTINUUM_ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173,https://YOUR-VERCEL-DOMAIN"
@@ -27,6 +28,7 @@ Replace the workspace path and Vercel origin with your real values. Keep the ter
     python -m pip install -e ".[dev]"
     export CONTINUUM_WORKSPACE_ROOT="$HOME/src/your-project"
     export CONTINUUM_WORKER_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(40))')"
+    echo "Pairing token: $CONTINUUM_WORKER_TOKEN"
     export CONTINUUM_SUPABASE_URL="https://YOUR_PROJECT_REF.supabase.co"
     export CONTINUUM_SUPABASE_PUBLISHABLE_KEY="sb_publishable_..."
     export CONTINUUM_ALLOWED_ORIGINS="http://localhost:5173,http://127.0.0.1:5173,https://YOUR-VERCEL-DOMAIN"

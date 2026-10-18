@@ -6,7 +6,7 @@ create table public.repository_path_locks (
     length(trim(path)) between 1 and 240
     and left(path,1) <> '/'
     and path not like '%//%'
-    and path !~ '(^|/)(\\.|\\.\\.)(/|$)'
+    and path !~ '(^|/)([.]|[.][.])(/|$)'
     and path !~ '^[A-Za-z]:'
   ),
   reason text not null default 'Protected by project owner',
