@@ -77,7 +77,7 @@ export default function LocalIDE() {
   const dirty = draft !== savedContent;
   const visibleFiles = useMemo(() => files.filter(file => file.path.toLowerCase().includes(filter.toLowerCase())), [files, filter]);
   const api = useCallback(async (path: string, init: RequestInit = {}) => {
-    const url = config.url.trim().replace(/\/+$/, "");
+    const url = normalizeWorkerUrl(config.url);
     const headers = new Headers(init.headers);
     headers.set("Authorization", "Bearer " + config.token.trim());
     if (init.body) headers.set("Content-Type", "application/json");
@@ -115,7 +115,7 @@ export default function LocalIDE() {
   const connect = useCallback(async () => {
     setConnecting(true); setError("");
     try {
-      const url = config.url.trim().replace(/\/+$/, "");
+      const url = normalizeWorkerUrl(config.url);
       const healthResponse = await fetch(url + "/api/worker/health", { mode: "cors", credentials: "omit" });
       if (!healthResponse.ok) throw new Error("Local worker health check failed.");
       const health = await healthResponse.json() as { paired?: boolean };

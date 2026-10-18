@@ -22,7 +22,7 @@ IGNORED = {".git", "node_modules", ".venv", "venv", "__pycache__", ".next", "dis
 SECRETS = {".env", ".env.local", ".env.production", ".env.development", ".npmrc", ".pypirc", "credentials.json", "secrets.json", "id_rsa", "id_ed25519"}
 SECRET_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".keystore"}
 origins = [x.strip().rstrip("/") for x in os.getenv("CONTINUUM_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if x.strip()]
-APP.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST", "PUT", "OPTIONS"], allow_headers=["Authorization", "Content-Type", "Access-Control-Request-Private-Network"], max_age=600)
+APP.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST", "PUT", "OPTIONS"], allow_headers=["Authorization", "Content-Type"], allow_private_network=True, max_age=600)
 
 @APP.middleware("http")
 async def allow_private_network_access_for_approved_origins(request, call_next):
