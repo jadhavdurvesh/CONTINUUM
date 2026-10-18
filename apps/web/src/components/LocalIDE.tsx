@@ -8,10 +8,14 @@ import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
 import { python } from "@codemirror/lang-python";
 import { EditorView } from "@codemirror/view";
+import { supabase } from "../lib/supabase";
 import { AlertTriangle, ChevronRight, Code2, FileCode2, FilePlus2, GitBranch, GitCommit, GitCompare, Play, RefreshCw, Save, Search, Settings2, ShieldCheck, Terminal, X } from "lucide-react";
 
 type LocalFile = { path: string; size: number; extension: string };
 type Reply = { exit_code?: number; output?: string; truncated?: boolean; detail?: string };
+type PathLock = { id: string; project_id: string; path: string; reason: string; locked_by: string; is_locked: boolean; created_at: string; updated_at: string };
+type LocalGrant = { resource_id: string; user_id: string; permitted_action: string; expires_at: string | null; revoked_at: string | null };
+type Props = { projectId: string; userId: string; accessToken: string; isOwner: boolean; onNotify: (message: string) => void };
 const CONFIG_KEY = "continuum.local-worker.config";
 const darkEditor = EditorView.theme({
   "&": { height: "100%", backgroundColor: "#20211e", color: "#e9e5da", fontSize: "12px" },
@@ -53,7 +57,7 @@ function savedConfig() {
   } catch { return { url: "http://127.0.0.1:4318", token: "" }; }
 }
 
-export default function LocalIDE() {
+export default function LocalIDE({ projectId, userId, accessToken, isOwner, onNotify }: Props) {
   const [config, setConfig] = useState(savedConfig);
   const [showSettings, setShowSettings] = useState(true);
   const [connected, setConnected] = useState(false);
@@ -74,12 +78,55 @@ export default function LocalIDE() {
   const [statusText, setStatusText] = useState("");
   const [diffText, setDiffText] = useState("");
   const [panel, setPanel] = useState<"terminal" | "git">("terminal");
+  const [pathLocks, setPathLocks] = useState<PathLock[]>([]);
+  const [permissionRequests, setPermissionRequests] = useState<any[]>([]);
+  const [localGrants, setLocalGrants] = useState<LocalGrant[]>([]);
+  const [governanceError, setGovernanceError] = useState("");
   const dirty = draft !== savedContent;
   const visibleFiles = useMemo(() => files.filter(file => file.path.toLowerCase().includes(filter.toLowerCase())), [files, filter]);
+  const selectedLock = pathLocks.find(lock => lock.path === selectedPath && lock.is_locked);
+  const hasLocalGrant = Boolean(selectedLock && localGrants.some(grant =>
+    grant.resource_id === selectedLock.id && grant.user_id === userId && grant.permitted_action === "edit"
+    && !grant.revoked_at && (!grant.expires_at || new Date(grant.expires_at).getTime() > Date.now())
+  ));
+  const canEditLocal = !selectedLock || hasLocalGrant;
+  const hasBlockingPathLocks = pathLocks.some(lock => lock.is_locked && !localGrants.some(grant =>
+    grant.resource_id === lock.id && grant.user_id === userId && grant.permitted_action === "edit"
+    && !grant.revoked_at && (!grant.expires_at || new Date(grant.expires_at).getTime() > Date.now())
+  ));
+
+  const refreshGovernance = useCallback(async () => {
+    if (!supabase) return;
+    const [lockResult, requestResult, grantResult] = await Promise.all([
+      supabase.from("repository_path_locks").select("*").eq("project_id", projectId).order("path", { ascending: true }),
+      supabase.from("permission_requests").select("*").eq("project_id", projectId).eq("resource_type", "local_file").eq("status", "pending").order("created_at", { ascending: true }),
+      supabase.from("permission_grants").select("*").eq("project_id", projectId).eq("resource_type", "local_file").eq("user_id", userId).is("revoked_at", null)
+    ]);
+    if (lockResult.error) setGovernanceError(lockResult.error.message);
+    else { setPathLocks((lockResult.data ?? []) as PathLock[]); setGovernanceError(""); }
+    if (!requestResult.error) setPermissionRequests(requestResult.data ?? []);
+    if (!grantResult.error) setLocalGrants((grantResult.data ?? []) as LocalGrant[]);
+  }, [projectId, userId]);
+
+  useEffect(() => {
+    void refreshGovernance();
+    const client = supabase;
+    if (!client) return;
+    const filter = "project_id=eq." + projectId;
+    const channel = client.channel("local-ide-governance-" + projectId)
+      .on("postgres_changes", { event: "*", schema: "public", table: "repository_path_locks", filter }, () => void refreshGovernance())
+      .on("postgres_changes", { event: "*", schema: "public", table: "permission_requests", filter }, () => void refreshGovernance())
+      .on("postgres_changes", { event: "*", schema: "public", table: "permission_grants", filter }, () => void refreshGovernance())
+      .subscribe();
+    return () => { void client.removeChannel(channel); };
+  }, [projectId, refreshGovernance]);
   const api = useCallback(async (path: string, init: RequestInit = {}) => {
     const url = normalizeWorkerUrl(config.url);
     const headers = new Headers(init.headers);
     headers.set("Authorization", "Bearer " + config.token.trim());
+    if (!projectId || !accessToken) throw new Error("Your CONTINUUM sign-in is missing. Sign out and sign in again before editing local files.");
+    headers.set("X-Continuum-Project-Id", projectId);
+    headers.set("X-Continuum-User-Token", accessToken);
     if (init.body) headers.set("Content-Type", "application/json");
     let response: Response;
     try { response = await fetch(url + path, { ...init, headers, mode: "cors", credentials: "omit" }); }
@@ -87,7 +134,7 @@ export default function LocalIDE() {
     const data = await response.json().catch(() => ({})) as Record<string, unknown>;
     if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Worker request failed (" + response.status + ").");
     return data;
-  }, [config.url, config.token]);
+  }, [config.url, config.token, projectId, accessToken]);
 
   const openFile = useCallback(async (path: string) => {
     if (path === selectedPath) return;
@@ -141,6 +188,7 @@ export default function LocalIDE() {
 
   async function saveFile() {
     if (!connected || !selectedPath || !dirty || saving) return;
+    if (!canEditLocal) { onNotify("That path is protected by the project owner. Request access or ask the owner to unlock it."); return; }
     setSaving(true); setError("");
     try {
       await api("/api/worker/file", { method: "PUT", body: JSON.stringify({ path: selectedPath, content: draft }) });
@@ -153,6 +201,11 @@ export default function LocalIDE() {
 
   async function runCommand(args: string[]) {
     if (!connected || busy) return;
+    const readOnlyGit = args[0] === "git" && ["status", "diff", "branch", "log"].includes(args[1] ?? "");
+    if (hasBlockingPathLocks && !readOnlyGit) {
+      onNotify("A protected repository path is active. Unlock it or grant access before running commands that may change files.");
+      return;
+    }
     setBusy(true); setError(""); setOutputTitle("RUNNING"); setOutput("Starting " + args.join(" ") + "…");
     try {
       const result = await api("/api/worker/run", { method: "POST", body: JSON.stringify({ command: args }) }) as Reply;
@@ -175,6 +228,7 @@ export default function LocalIDE() {
 
   async function commitCurrentFile() {
     if (!connected || !selectedPath || dirty || busy) return;
+    if (!canEditLocal) { onNotify("This file is protected. Unlock it or grant access before committing it."); return; }
     if (!window.confirm("Create a local Git commit containing only " + selectedPath + "? This will not push or deploy.")) return;
     setBusy(true); setError("");
     try {
@@ -187,6 +241,39 @@ export default function LocalIDE() {
     finally { setBusy(false); }
   }
 
+  async function togglePathLock() {
+    if (!supabase || !projectId || !userId || !selectedPath || !isOwner) return;
+    const prior = pathLocks.find(lock => lock.path === selectedPath);
+    const nextLocked = !prior?.is_locked;
+    const { error: lockError } = await supabase.from("repository_path_locks").upsert({
+      project_id: projectId, path: selectedPath, reason: "Protected by project owner", locked_by: userId, is_locked: nextLocked
+    }, { onConflict: "project_id,path" });
+    if (lockError) { setError(lockError.message); return; }
+    onNotify(nextLocked ? "Repository path protected across the shared workspace." : "Repository path unlocked.");
+    await refreshGovernance();
+  }
+
+  async function requestLocalEdit() {
+    if (!supabase || !projectId || !selectedLock || canEditLocal) return;
+    const { error: requestError } = await supabase.from("permission_requests").insert({
+      project_id: projectId, resource_type: "local_file", resource_id: selectedLock.id,
+      requested_action: "edit", reason: "Requesting permission to edit local repository path " + selectedPath
+    });
+    if (requestError) { setError(requestError.message); return; }
+    onNotify("Edit request sent to the project owner.");
+    await refreshGovernance();
+  }
+
+  async function reviewLocalPermission(request: any, approve: boolean) {
+    if (!supabase || !isOwner) return;
+    const { error: reviewError } = await supabase.rpc("review_permission_request", {
+      p_request_id: request.id, p_approve: approve, p_grant_hours: 24
+    });
+    if (reviewError) { setError(reviewError.message); return; }
+    onNotify(approve ? "Local repository edit access granted for 24 hours." : "Local repository edit request declined.");
+    await refreshGovernance();
+  }
+
   function editorShortcut(event: KeyboardEvent<HTMLDivElement>) {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); void saveFile(); }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "p") { event.preventDefault(); document.querySelector<HTMLInputElement>(".local-ide-search input")?.focus(); }
@@ -196,7 +283,12 @@ export default function LocalIDE() {
     const path = window.prompt("New relative file path (example: src/main.py)");
     if (!path?.trim()) return;
     try {
-      await api("/api/worker/file", { method: "POST", body: JSON.stringify({ path: path.trim(), content: "" }) });
+      const newPath = path.trim().replace(/\\/g, "/");
+      if (pathLocks.some(lock => lock.path === newPath && lock.is_locked)) {
+        onNotify("That path is protected. Unlock it before creating a new file at the same path.");
+        return;
+      }
+      await api("/api/worker/file", { method: "POST", body: JSON.stringify({ path: newPath, content: "" }) });
       await refreshFiles(false);
       setSelectedPath(path.trim()); setDraft(""); setSavedContent("");
     } catch (e) { setError(e instanceof Error ? e.message : "Could not create file."); }
@@ -206,7 +298,12 @@ export default function LocalIDE() {
   return <section className="local-ide" onKeyDownCapture={editorShortcut}>
     <div className="local-ide-toolbar">
       <div className="local-ide-breadcrumb"><span>LOCAL WORKSPACE</span><ChevronRight size={13}/><strong>{workspace?.name ?? "Not connected"}</strong>{selectedPath && <><ChevronRight size={13}/><span>{selectedPath}</span></>}</div>
-      <div className="local-ide-actions"><span className={"local-ide-status " + (connected ? "connected" : "")}><i/>{connected ? "WORKER ONLINE" : "WORKER OFFLINE"}</span><button className="local-ide-icon" title="Refresh files" disabled={!connected} onClick={() => void refreshFiles()}><RefreshCw size={15}/></button><button className="local-ide-action" onClick={() => setShowSettings(value => !value)}><Settings2 size={14}/> Connection</button></div>
+      <div className="local-ide-actions">
+        {selectedPath && connected && isOwner && <button className="local-ide-action" onClick={() => void togglePathLock()}><ShieldCheck size={14}/>{selectedLock ? "Unlock file" : "Protect file"}</button>}
+        {selectedPath && connected && !isOwner && selectedLock && !canEditLocal && <button className="local-ide-action" onClick={() => void requestLocalEdit()}><ShieldCheck size={14}/> Request edit</button>}
+        <span className={"local-ide-status " + (connected ? "connected" : "")}><i/>{connected ? "WORKER ONLINE" : "WORKER OFFLINE"}</span>
+        <button className="local-ide-icon" title="Refresh files" disabled={!connected} onClick={() => void refreshFiles()}><RefreshCw size={15}/></button>
+        <button className="local-ide-action" onClick={() => setShowSettings(value => !value)}><Settings2 size={14}/> Connection</button></div>
     </div>
     {showSettings && <div className="local-ide-connection">
       <div className="local-ide-connection-copy"><strong>Connect to your own PC</strong><span>The worker reads only the repository folder configured on that computer. URL and token stay in this browser's local storage.</span></div>
@@ -215,6 +312,8 @@ export default function LocalIDE() {
       <button className="local-ide-action primary" disabled={connecting || !config.token.trim()} onClick={() => void connect()}>{connecting ? <RefreshCw size={14}/> : <ShieldCheck size={14}/>} {connecting ? "Connecting…" : "Connect"}</button>
     </div>}
     {error && <div className="local-ide-error"><AlertTriangle size={15}/><span>{error}</span><button onClick={() => setError("")} aria-label="Dismiss"><X size={14}/></button></div>}
+    {governanceError && <div className="local-ide-error"><AlertTriangle size={15}/><span>Cloud path-lock state could not be loaded: {governanceError}. Writes fail closed until corrected.</span></div>}
+    {selectedLock && <div className="local-ide-lock-banner"><ShieldCheck size={14}/><span><strong>Protected path:</strong> {selectedPath} · {selectedLock.reason}{canEditLocal ? " · Temporary edit access is active." : " · Writes and local commits are blocked until the owner unlocks it or grants access."}</span></div>}
     <div className="local-ide-layout">
       <aside className="local-ide-explorer">
         <div className="local-ide-explorer-head"><span>EXPLORER <b>{files.length}</b></span><button disabled={!connected} onClick={() => void createFile()} title="New file"><FilePlus2 size={15}/></button></div>
@@ -223,12 +322,12 @@ export default function LocalIDE() {
         <div className="local-ide-explorer-foot"><ShieldCheck size={13}/> Secrets and generated folders hidden</div>
       </aside>
       <div className="local-ide-editor-column">
-        <div className="local-ide-tab"><FileCode2 size={14}/><span>{selectedPath ? leaf(selectedPath) : "No file open"}</span>{dirty && <i/>}<div className="local-ide-tab-spacer"/><span className="local-ide-language">{activeExt}</span><button disabled={!selectedPath || !dirty || saving} onClick={() => void saveFile()} className="local-ide-save"><Save size={13}/>{saving ? "Saving…" : dirty ? "Save" : "Saved"} <kbd>Ctrl S</kbd></button></div>
+        <div className="local-ide-tab"><FileCode2 size={14}/><span>{selectedPath ? leaf(selectedPath) : "No file open"}</span>{dirty && <i/>}<div className="local-ide-tab-spacer"/><span className="local-ide-language">{activeExt}</span><button disabled={!selectedPath || !dirty || saving || !canEditLocal} onClick={() => void saveFile()} className="local-ide-save"><Save size={13}/>{saving ? "Saving…" : dirty ? "Save" : "Saved"} <kbd>Ctrl S</kbd></button></div>
         <div className="local-ide-code">{selectedPath ? <CodeMirror value={draft} height="100%" theme={darkEditor} extensions={extensionsFor(selectedPath)} onChange={setDraft} basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: true, highlightActiveLineGutter: true, closeBrackets: true, autocompletion: true, indentOnInput: true, searchKeymap: true }}/> : <div className="local-ide-welcome"><Code2 size={30}/><span>CONTINUUM / LOCAL IDE</span><h2>Your repository.<br/><em>Your tools.</em></h2><p>Connect the local worker to edit actual files, inspect Git changes, and run approved build/test commands.</p></div>}</div>
         <div className="local-ide-statusbar"><span><GitBranch size={12}/>{workspace?.branch ?? "no branch"}</span><span>UTF-8</span><span>{draft.split("\n").length} lines</span><span>{new TextEncoder().encode(draft).length.toLocaleString()} bytes</span><div className="local-ide-tab-spacer"/><span>{dirty ? "UNSAVED CHANGES" : "LOCAL CHECKOUT"}</span></div>
         <div className="local-ide-tools">
           <div className="local-ide-tool-tabs"><button className={panel === "terminal" ? "active" : ""} onClick={() => setPanel("terminal")}><Terminal size={14}/> TERMINAL / TASKS</button><button className={panel === "git" ? "active" : ""} onClick={() => void loadGitStatus()}><GitCompare size={14}/> SOURCE CONTROL</button><div className="local-ide-tab-spacer"/><button title="Clear output" onClick={() => setOutput("")}><X size={14}/></button></div>
-          {panel === "terminal" ? <div className="local-ide-runner"><div className="local-ide-command"><span>$</span><input value={command} onChange={event => setCommand(event.target.value)} placeholder="npm run build"/><button disabled={!connected || busy} onClick={() => void runCommand(parseArgs(command))}><Play size={13}/> Run</button></div><div className="local-ide-presets"><button disabled={!connected || busy} onClick={() => void runCommand(["npm", "run", "build"])}>Build</button><button disabled={!connected || busy} onClick={() => void runCommand(["npm", "test"])}>Test</button><button disabled={!connected || busy} onClick={() => void runCommand(["npm", "run", "lint"])}>Lint</button><button disabled={!connected || busy} onClick={() => void runCommand(["python", "-m", "pytest"])}>Pytest</button><button disabled={!connected || busy} onClick={() => void runCommand(["git", "status", "--short", "--branch"])}>Git status</button></div></div> : <div className="local-ide-git"><div className="local-ide-git-heading"><strong>Working tree</strong><button disabled={!connected || busy} onClick={() => void loadGitStatus()}><RefreshCw size={13}/> Refresh</button></div><pre>{statusText || "Select Source Control to inspect the working tree."}</pre><div className="local-ide-git-heading"><strong>Unstaged diff</strong><span>{diffText ? "Available" : "No diff loaded"}</span></div><pre>{diffText || "No unstaged diff, or diff has not been loaded."}</pre><label>Commit message<input value={commitMessage} onChange={event => setCommitMessage(event.target.value)} maxLength={160}/></label><button className="local-ide-action primary" disabled={!connected || !selectedPath || dirty || busy || !commitMessage.trim()} onClick={() => void commitCurrentFile()}><GitCommit size={14}/> Commit selected file only</button><small>Commits locally after confirmation. No push, merge, or deployment.</small></div>}
+          {panel === "terminal" ? <div className="local-ide-runner"><div className="local-ide-command"><span>$</span><input value={command} onChange={event => setCommand(event.target.value)} placeholder="npm run build"/><button disabled={!connected || busy} onClick={() => void runCommand(parseArgs(command))}><Play size={13}/> Run</button></div><div className="local-ide-presets"><button disabled={!connected || busy} onClick={() => void runCommand(["npm", "run", "build"])}>Build</button><button disabled={!connected || busy} onClick={() => void runCommand(["npm", "test"])}>Test</button><button disabled={!connected || busy} onClick={() => void runCommand(["npm", "run", "lint"])}>Lint</button><button disabled={!connected || busy} onClick={() => void runCommand(["python", "-m", "pytest"])}>Pytest</button><button disabled={!connected || busy} onClick={() => void runCommand(["git", "status", "--short", "--branch"])}>Git status</button></div></div> : <div className="local-ide-git">{isOwner && permissionRequests.length > 0 && <div className="local-ide-lock-requests"><div className="local-ide-git-heading"><strong>Owner approval queue</strong><span>{permissionRequests.length} pending</span></div>{permissionRequests.map(request => { const pathLock = pathLocks.find(lock => lock.id === request.resource_id); return <div className="local-ide-lock-request" key={request.id}><div><strong>{pathLock?.path ?? "Repository file"}</strong><small>Requested by {String(request.requested_by).slice(0,8)}…</small></div><button onClick={() => void reviewLocalPermission(request,false)} disabled={busy}>Deny</button><button onClick={() => void reviewLocalPermission(request,true)} className="grant" disabled={busy}>Grant 24h</button></div>; })}</div>}<div className="local-ide-git-heading"><strong>Working tree</strong><button disabled={!connected || busy} onClick={() => void loadGitStatus()}><RefreshCw size={13}/> Refresh</button></div><pre>{statusText || "Select Source Control to inspect the working tree."}</pre><div className="local-ide-git-heading"><strong>Unstaged diff</strong><span>{diffText ? "Available" : "No diff loaded"}</span></div><pre>{diffText || "No unstaged diff, or diff has not been loaded."}</pre><label>Commit message<input value={commitMessage} onChange={event => setCommitMessage(event.target.value)} maxLength={160}/></label><button className="local-ide-action primary" disabled={!connected || !selectedPath || dirty || busy || !commitMessage.trim() || !canEditLocal} onClick={() => void commitCurrentFile()}><GitCommit size={14}/> Commit selected file only</button><small>Commits locally after confirmation. No push, merge, or deployment.</small></div>}
           <div className="local-ide-output-head"><span>{outputTitle}</span><span>{busy ? "RUNNING" : "READY"}</span></div><pre className="local-ide-output">{output || "No output yet."}</pre>
         </div>
       </div>
