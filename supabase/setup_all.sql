@@ -329,6 +329,12 @@ end; $$;
 create trigger on_auth_user_created after insert on auth.users
 for each row execute procedure private.bootstrap_auth_user();
 
+-- Backfill profiles for accounts already created in Supabase Auth before this script runs.
+insert into public.profiles(id,display_name)
+select id, coalesce(raw_user_meta_data->>'display_name', split_part(email,'@',1))
+from auth.users
+on conflict (id) do nothing;
+
 create or replace function private.add_project_owner_membership()
 returns trigger language plpgsql security definer set search_path = ''
 as $$
