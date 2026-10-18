@@ -25,7 +25,7 @@ class WorkspaceSafetyTests(unittest.TestCase):
 
     def test_credentials_are_never_opened_in_editor(self):
         with tempfile.TemporaryDirectory() as folder:
-            for path in (".env", ".env.local", "secrets.pem", ".ssh/id_rsa"):
+            for path in (".env", ".env.local", "secrets.pem", ".ssh/id_rsa", ".git/config", "node_modules/pkg/index.js"):
                 with self.assertRaises(WorkspaceError):
                     safe_file_path(folder, path)
 
