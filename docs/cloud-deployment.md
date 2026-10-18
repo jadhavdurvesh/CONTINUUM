@@ -45,7 +45,7 @@ The native application needs its cloud endpoints at packaging time so end users 
 - SUPABASE_PUBLISHABLE_KEY — publishable/anon key, not service role.
 - CONTINUUM_CLOUD_API_URL — stable Vercel Production URL, with no /api/... suffix.
 
-Then run the **Build native desktop installer** workflow. It generates apps/native/continuum/cloud_config.py in the Actions runner, builds the native PySide6 app, packages it with PyInstaller, and creates an Inno Setup installer. The generated file is not committed. AI provider keys remain only in Vercel and are never shipped to the desktop.
+Then run the **Build native desktop installer** workflow. It generates the ignored apps/native/continuum/_release_cloud_config.py module in the Actions runner, builds the native PySide6 app, packages it with PyInstaller, and creates an Inno Setup installer. The generated file is not committed. AI provider keys remain only in Vercel and are never shipped to the desktop.
 
 If the Vercel deployment URL changes, update CONTINUUM_CLOUD_API_URL and build a new installer. The desktop local IDE works offline regardless; only cloud features depend on the deployment being reachable.
 
