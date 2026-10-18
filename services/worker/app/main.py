@@ -163,6 +163,16 @@ def assert_path_editable(project_id: str | None, path: str, user_token: str | No
             continue
     raise HTTPException(423, 'This file is protected in the shared workspace. Ask the owner to unlock it or grant temporary edit access.')
 
+def assert_mutating_command_allowed(project_id: str | None, user_token: str | None) -> None:
+    # A build/test script can write arbitrary files; block it while any protected
+    # repository path lacks an explicit grant for this signed-in user.
+    assert_path_editable(project_id, '.continuum-permission-probe', user_token)
+    project_uuid = str(_uuid.UUID(project_id or ''))
+    lock_query = urlencode({'select':'path', 'project_id':'eq.' + project_uuid, 'is_locked':'eq.true'})
+    locks = cloud_json('/rest/v1/repository_path_locks?' + lock_query, user_token or '')
+    for lock in locks if isinstance(locks, list) else []:
+        assert_path_editable(project_uuid, lock['path'], user_token)
+
 class FileWrite(BaseModel):
     path: str = Field(min_length=1, max_length=240)
     content: str = Field(max_length=1_500_000)
@@ -220,13 +230,13 @@ def read_file(path: Annotated[str, Query(min_length=1, max_length=240)]) -> dict
 def write_file(body: FileWrite, x_continuum_project_id: Annotated[str | None, Header()] = None, x_continuum_user_token: Annotated[str | None, Header()] = None) -> dict:
     root = root_path()
     target = resolve_path(root, body.path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target = resolve_path(root, body.path)
     if target.exists() and not target.is_file():
         raise HTTPException(400, "Path is not a file.")
     if len(body.content.encode("utf-8")) > MAX_FILE_BYTES:
         raise HTTPException(413, "File exceeds the 1.5 MB limit.")
     assert_path_editable(x_continuum_project_id, body.path, x_continuum_user_token)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target = resolve_path(root, body.path)
     temp_name = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=target.parent, prefix=".continuum-", suffix=".tmp", delete=False) as temp:
@@ -242,11 +252,11 @@ def write_file(body: FileWrite, x_continuum_project_id: Annotated[str | None, He
 def create_file(body: FileWrite, x_continuum_project_id: Annotated[str | None, Header()] = None, x_continuum_user_token: Annotated[str | None, Header()] = None) -> dict:
     root = root_path()
     target = resolve_path(root, body.path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target = resolve_path(root, body.path)
     if len(body.content.encode("utf-8")) > MAX_FILE_BYTES:
         raise HTTPException(413, "File exceeds the 1.5 MB limit.")
     assert_path_editable(x_continuum_project_id, body.path, x_continuum_user_token)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target = resolve_path(root, body.path)
     try:
         with target.open("x", encoding="utf-8", newline="") as handle:
             handle.write(body.content)
@@ -263,8 +273,11 @@ def git_diff(cached: bool = False) -> dict:
     return run_process(["git", "diff", "--cached", "--"] if cached else ["git", "diff", "--"], root_path(), 10)
 
 @APP.post("/api/worker/run", dependencies=[Depends(require_token)])
-def run(body: CommandRequest) -> dict:
+def run(body: CommandRequest, x_continuum_project_id: Annotated[str | None, Header()] = None, x_continuum_user_token: Annotated[str | None, Header()] = None) -> dict:
     args, timeout = checked_command(body.command)
+    read_only_git = args[0] == "git" and len(args) > 1 and args[1] in {"status", "diff", "branch", "log"}
+    if not read_only_git:
+        assert_mutating_command_allowed(x_continuum_project_id, x_continuum_user_token)
     return run_process(args, root_path(), timeout)
 
 @APP.post("/api/worker/git/commit", dependencies=[Depends(require_token)])
