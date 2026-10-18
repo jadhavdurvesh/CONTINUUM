@@ -1,0 +1,53 @@
+import tempfile
+import unittest
+from pathlib import Path
+
+from continuum.workspace import WorkspaceError, safe_file_path, should_ignore_path, read_text_file
+
+
+class WorkspaceSafetyTests(unittest.TestCase):
+    def test_normal_relative_path_is_resolved_inside_workspace(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "src").mkdir()
+            target = safe_file_path(root, "src/main.py")
+            self.assertEqual(target, root / "src" / "main.py")
+
+    def test_traversal_is_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaises(WorkspaceError):
+                safe_file_path(folder, "../outside.txt")
+
+    def test_absolute_path_is_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaises(WorkspaceError):
+                safe_file_path(folder, str(Path(folder).parent / "outside.txt"))
+
+    def test_credentials_are_never_opened_in_editor(self):
+        with tempfile.TemporaryDirectory() as folder:
+            for path in (".env", ".env.local", "secrets.pem", ".ssh/id_rsa"):
+                with self.assertRaises(WorkspaceError):
+                    safe_file_path(folder, path)
+
+    def test_symlink_cannot_escape_workspace(self):
+        with tempfile.TemporaryDirectory() as folder, tempfile.TemporaryDirectory() as outside:
+            root = Path(folder)
+            (root / "escape").symlink_to(Path(outside), target_is_directory=True)
+            with self.assertRaises(WorkspaceError):
+                safe_file_path(root, "escape/secret.txt")
+
+    def test_noise_directories_are_hidden(self):
+        self.assertTrue(should_ignore_path(".git/config"))
+        self.assertTrue(should_ignore_path("node_modules/leftpad/index.js"))
+        self.assertFalse(should_ignore_path("src/main.py"))
+
+    def test_text_reader_rejects_binary(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "image.bin"
+            target.write_bytes(b"\x00\x01")
+            with self.assertRaises(WorkspaceError):
+                read_text_file(target)
+
+
+if __name__ == "__main__":
+    unittest.main()
