@@ -12,7 +12,7 @@ CONTINUUM is a cloud-synchronized project workspace for managing engineering wor
 - Realtime refresh for tasks, activity, locks, permission requests, agent runs, and worker status
 - Project creation, task creation, task status updates, and project activity audit events
 - Code Workbench with a file explorer, multi-tab syntax-aware editor, search shortcuts, version history, protected files, and conflict-safe cloud saves
-- Local IDE companion for editing a real checkout, inspecting Git status/diffs, running allowlisted build/test commands, and creating explicit local commits
+- Local IDE companion for editing a real checkout, inspecting Git status/diffs, running allowlisted build/test commands, creating explicit local commits, and enforcing cloud-backed repository path locks
 - Database-enforced resource locks and time-limited permission grants
 - Supabase Edge Function for invite-only project-member invitations
 - Electron desktop shell and Windows installer workflow with a license-acceptance page

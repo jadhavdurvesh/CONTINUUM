@@ -8,7 +8,7 @@ The system is cloud-first for shared state and multi-PC coordination. It is not 
 - **Identity and shared data:** hosted Supabase Auth + PostgreSQL + Row Level Security.
 - **Live collaboration:** Supabase Realtime for authorized task/activity updates, code-file changes, locks, and permission requests.
 - **Code Workbench:** CodeMirror in the dashboard, with versioned cloud file records and optimistic version checks.
-- **Local IDE worker:** opt-in loopback FastAPI service for the selected local checkout, token-authenticated file access, Git status/diff/explicit commits, and allowlisted build/test commands. It never pushes or deploys.
+- **Local IDE worker:** opt-in loopback FastAPI service for the selected local checkout, token-authenticated file access, cloud-verified project membership and repository path locks, Git status/diff/explicit commits, and allowlisted build/test commands. Mutating commands are blocked while a protected path lacks an active grant. It never pushes or deploys.
 - **Privileged operations:** Supabase SQL functions and Edge Functions. Secret keys never ship in the browser or desktop installer.
 - **Workers:** a small worker service on each authorized PC performs local coding work and reports task status/checkpoints to the cloud control plane.
 - **Model routing:** the existing RELAY service remains the provider-routing/failover layer.
