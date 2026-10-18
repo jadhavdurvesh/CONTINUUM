@@ -1,83 +1,121 @@
 # CONTINUUM
 
-**AI Project Operating System**  
-*One project. Shared knowledge. Continuous progress.*
+**A native local-first engineering IDE with cloud project intelligence.**
 
-CONTINUUM is a cloud-synchronized project workspace for managing engineering work from requirements and planning through implementation, testing, approval, and release. Human collaborators and AI agents share project state, while permissions and resource locks control who can change protected work.
+CONTINUUM is a real desktop application—not a website inside an Electron wrapper. The Windows installer packages a native **PySide6/Qt desktop program**. It opens and edits files directly from folders on your PC. The editor, file explorer, new-file flow, local saves, and workspace selection work without internet.
 
-## Current implementation
+Cloud features are a separate layer: hosted Supabase provides sign-in, shared projects, tasks, agent sessions, permissions, and conversation history. Vercel serverless functions orchestrate cloud AI agents and route requests across configured providers. AI provider credentials remain in Vercel environment variables, never on the user's machine.
 
-- React + TypeScript + Vite dashboard with a warm paper/ink visual system, terracotta, olive, and plum accents
-- Hosted Supabase Auth + PostgreSQL + Row Level Security for shared state
-- Realtime refresh for tasks, activity, locks, permission requests, agent runs, and worker status
-- Project creation, task creation, task status updates, and project activity audit events
-- Code Workbench with a file explorer, multi-tab syntax-aware editor, search shortcuts, version history, protected files, and conflict-safe cloud saves
-- Local IDE companion for editing a real checkout, inspecting Git status/diffs, running allowlisted build/test commands, creating explicit local commits, and enforcing cloud-backed repository path locks
-- Database-enforced resource locks and time-limited permission grants
-- Supabase Edge Function for invite-only project-member invitations
-- Electron desktop shell and Windows installer workflow with a license-acceptance page
-- Product, architecture, cloud deployment, security, data model, and roadmap documentation
+## What works in the native app
 
-The Code Workbench edits versioned files stored in the shared cloud workspace. The separate Local IDE connects to a loopback-only worker on a developer PC for local file edits, Git status/diffs, allowlisted build/test tasks, and explicitly requested local commits. It never pushes or deploys automatically. Worker leases/heartbeats, the RELAY adapter, cross-runtime handoff execution, and test-runner integration still require further implementation. The dashboard marks unconfigured areas honestly rather than inventing metrics.
+- Native Windows application and normal Start Menu/optional desktop shortcuts.
+- Local project-folder explorer, multiple open editor tabs, new files, saving, and unsaved-change protection.
+- Offline-first local editing. No web view or Electron runtime.
+- Optional hosted cloud sign-in and shared project selection.
+- Durable cloud agent sessions with Planner, Coder, Reviewer, and QA roles.
+- Cloud model routing with provider failover (OpenAI-compatible OpenAI, Groq, and OpenRouter endpoints).
+- The desktop sends a small, bounded set of relevant source snippets to the hosted AI service for a requested agent step.
+- Agent edits are returned as proposals. Applying a proposal requires explicit approval, creates local backups, rejects secret paths/traversal, and checks cloud repository path locks first.
+- No automatic commits, pushes, deployments, or arbitrary command execution from agent output.
 
-## Cloud architecture
+**Offline boundary:** local file editing and saves continue without internet. Cloud sign-in, shared project records, agent runs, database sync, and model calls require internet. If the cloud is unavailable, the local IDE remains open and usable.
 
-The web application is not deployed by these commits. In your own Vercel account, import this repository and set its root directory to `apps/web`; then configure the Supabase URL and publishable key as environment variables. See `docs/cloud-deployment.md`.
+## Architecture
 
+- **Native desktop:** apps/native — PySide6 GUI, local workspace, safe file handling, packaged Windows installer.
+- **Cloud dashboard:** apps/web — React + TypeScript + Vite; deploy to Vercel with root directory apps/web.
+- **Cloud agent APIs:** apps/web/api/agents — authenticated Vercel functions; provider keys live only in Vercel.
+- **Shared database:** hosted Supabase Auth, PostgreSQL, RLS, and Realtime. SQL migrations are in supabase/migrations.
+- **Local Python worker:** services/worker remains an optional developer-only companion for the legacy browser Local IDE; the native app does not need it for normal local editing or cloud agent calls.
 
-- Web dashboard: Vercel, project root apps/web
-- Shared backend: hosted Supabase Auth, PostgreSQL, RLS, and Realtime
-- Member invitations: Supabase Edge Function invite-project-member
-- Model routing: integrate the existing RELAY project through a server-side adapter
-- Coding execution: authorized local or remote worker nodes
-- Desktop app: Electron shell around the same dashboard, signing into the same cloud project
+## Cloud deployment (one-time owner setup)
 
-See docs/cloud-deployment.md, docs/architecture.md, and docs/security-and-permissions.md.
+1. Create or select a hosted Supabase project. Apply all migrations using the Supabase CLI after linking the project:
 
-## Run the web client locally
+~~~bash
+supabase login
+supabase link --project-ref YOUR_PROJECT_REF
+supabase db push
+supabase functions deploy invite-project-member
+~~~
 
-Requires Node.js 20 or newer.
+2. Import this repository into Vercel and set the project root to apps/web.
+3. Configure Vercel environment variables:
+   - VITE_SUPABASE_URL
+   - VITE_SUPABASE_PUBLISHABLE_KEY
+   - SUPABASE_URL
+   - SUPABASE_PUBLISHABLE_KEY (or SUPABASE_ANON_KEY)
+   - At least one model-provider key: OPENAI_API_KEY, GROQ_API_KEY, or OPENROUTER_API_KEY.
+   - Optional model settings: OPENAI_MODEL, OPENAI_BASE_URL, GROQ_MODEL, OPENROUTER_MODEL.
+4. Use the stable Production URL of the Vercel deployment for the desktop release configuration.
+5. Configure Supabase Auth email delivery and redirect URLs. Keep signup/invitation policies restricted to the intended workspace.
+6. Apply RLS migrations before using cloud data or agent sessions.
 
-    cd apps/web
-    npm install
-    cp .env.example .env.local
-    # Fill VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in .env.local
-    npm run dev
+The native installer does not ask users for Supabase or AI credentials. Before generating an installer, the repository owner adds these **GitHub Actions repository secrets once**:
 
-Open http://localhost:5173. Without cloud values the app displays the cloud-configuration guide rather than fabricated project data.
+- SUPABASE_URL — hosted project URL.
+- SUPABASE_PUBLISHABLE_KEY — public publishable/anon client key only, never the service-role key.
+- CONTINUUM_CLOUD_API_URL — stable Vercel Production URL, for example https://your-deployment.vercel.app.
 
-## Set up the shared cloud database
+The installer build embeds only these public connection settings. AI-provider keys stay in Vercel and are not distributed. Since the Supabase client key is public, Row Level Security is mandatory.
 
-Install and authenticate the Supabase CLI, link your hosted project, and apply the migration and invitation function:
+## Build the native Windows installer
 
-    supabase login
-    supabase link --project-ref YOUR_PROJECT_REF
-    supabase db push
-    supabase functions deploy invite-project-member
+Open the **Build native desktop installer** workflow in GitHub Actions and select **Run workflow**. The workflow installs Python dependencies and Inno Setup, runs the native workspace tests, packages CONTINUUM, and publishes CONTINUUM-Setup-0.2.0.exe as an Actions artifact. Download it from that successful workflow run.
 
-Configure Auth email delivery and allowed redirect URLs before inviting collaborators. Keep privileged server keys in the hosted function environment only. Never add a service-role key to a VITE_ variable.
+The native installer workflow intentionally fails if the required GitHub Actions secrets are missing, rather than generating an installer that asks every user to manually enter keys.
 
-## Local IDE worker
+## Develop locally
 
-See `services/worker/README.md` to connect the Local IDE to a real checkout on your own PC. The worker must bind to `127.0.0.1`; configure its random bearer token and exact allowed browser origins. Each PC runs its own worker against its own clone.
+### Web dashboard
 
-## Desktop installer
+Requires Node.js 20+:
 
-GitHub Actions builds the Windows installer. Run the Build desktop installers workflow manually, or push a version tag such as v0.1.0. The NSIS installer displays LICENSE and requires acceptance before installation proceeds.
+~~~bash
+cd apps/web
+npm install
+cp .env.example .env.local
+# Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY for your dev project
+npm run dev
+~~~
 
-## Tests and CI
+The Vercel API functions run when deployed on Vercel. For local serverless API development, use the Vercel CLI and configure the same server-side environment variables.
 
-GitHub Actions builds the dashboard and runs the API unit tests on pushes and pull requests. The installer workflow creates an artifact downloadable from its run. A successful CI build is not the same as deployment to a configured cloud project.
+### Native desktop
 
-## Safety defaults
+Requires Python 3.11+:
 
-- Invitation-only authentication; no public signup flow is provided in the app
-- Browser uses only the Supabase URL and publishable key with RLS
-- Locks and role checks are enforced server-side
-- Agents cannot grant their own permissions or unlock protected resources
-- Merge, deployment, and destructive operations remain approval-gated
-- Test results must originate from recorded executions
-- Do not commit credentials or private keys
+~~~bash
+cd apps/native
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+python -m pip install -r requirements.txt
+python main.py
+~~~
+
+Without packaging-time cloud configuration, the native editor still works offline; cloud actions remain disabled and no key-entry wizard is shown.
+
+Run native workspace safety tests:
+
+~~~bash
+cd apps/native
+python -m unittest discover -s tests -v
+~~~
+
+### Existing Python services
+
+- services/api — existing API service and unit tests.
+- services/worker — local-only worker for the optional legacy browser IDE. Install its development extras before running pytest.
+
+## Security boundaries
+
+- Desktop embeds only a public Supabase publishable/anon key. It must not contain service-role keys or AI-provider credentials.
+- Provider credentials are stored as Vercel environment variables and read only by server-side agent functions.
+- Supabase row-level security enforces membership and protected cloud workspace writes.
+- Local workspace writes are restricted to the selected root. Secret files, credential files, binary files, traversal paths, symlink paths, and very large text files are blocked by the built-in editor.
+- Model changes are proposals; the user chooses when to apply them. Existing local files are backed up before applying.
+- Git commit, push, deployment, destructive operations, and unrestricted shell execution are not automatic.
 
 ## License
 
