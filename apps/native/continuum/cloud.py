@@ -9,7 +9,10 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any
 
-from .cloud_config import CLOUD_API_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL
+try:
+    from ._release_cloud_config import CLOUD_API_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL
+except ImportError:
+    from .cloud_config import CLOUD_API_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL
 
 
 class CloudError(RuntimeError):
