@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/agents/run-step.ts": {
+      "maxDuration": 60
+    }
+  }
+}
