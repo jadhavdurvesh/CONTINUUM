@@ -4,13 +4,14 @@ import {
   Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, Bell, BookOpen, Bot, Boxes, Code2,
   Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, Command,
   FileText, FlaskConical, HardDrive, LayoutGrid, LockKeyhole, LogOut,
-  Menu, Plus, Radio, Search, Settings2, ShieldCheck, ShieldEllipsis,
+  Menu, Plus, Radio, Search, Settings2, ShieldCheck, ShieldEllipsis, Terminal,
   Target, Users, Workflow, X, Zap
 } from "lucide-react";
 import { cloudConfigured, supabase, type ActivityEvent, type Project, type Task } from "./lib/supabase";
 import CodeWorkbench from "./components/CodeWorkbench";
+import LocalIDE from "./components/LocalIDE";
 
-type Page = "Overview" | "Tasks" | "Code Workbench" | "Activity" | "Protected resources" | "Agents & workers" | "Documentation" | "Settings";
+type Page = "Overview" | "Tasks" | "Code Workbench" | "Local IDE" | "Activity" | "Protected resources" | "Agents & workers" | "Documentation" | "Settings";
 type TaskStatus = Task["status"];
 
 const statusLabels: Record<TaskStatus, string> = {
@@ -22,6 +23,7 @@ const nav: { section: string; label: Page; icon: typeof LayoutGrid }[] = [
   { section: "PROJECT", label: "Overview", icon: LayoutGrid },
   { section: "PROJECT", label: "Tasks", icon: CheckCheck },
   { section: "PROJECT", label: "Code Workbench", icon: Code2 },
+  { section: "PROJECT", label: "Local IDE", icon: Terminal },
   { section: "PROJECT", label: "Documentation", icon: BookOpen },
   { section: "SYSTEM", label: "Agents & workers", icon: Bot },
   { section: "SYSTEM", label: "Activity", icon: Activity },
@@ -295,6 +297,7 @@ function App() {
     "Overview": "A live view of delivery, engineering health, and what needs attention.",
     "Tasks": "Track the work, the owner, and the next meaningful state change.",
     "Code Workbench": "Edit shared source files with syntax highlighting, saved history, and change protection.",
+    "Local IDE": "Edit your actual local checkout, inspect Git changes, and run approved build and test tasks.",
     "Activity": "A chronological record of changes made by people and automation.",
     "Protected resources": "Explicit locks and permission requests for work that must not change casually.",
     "Agents & workers": "The cloud control plane for model routes, agent runs, and connected workstations.",
@@ -326,13 +329,13 @@ function App() {
     <main className="main-area">
       <header className="topbar">
         <div className="topbar-left"><button className="icon-quiet menu-toggle" onClick={() => setMobileNav(true)} aria-label="Open navigation"><Menu size={19}/></button><div className="breadcrumbs"><span>Workspace</span><ChevronRight size={13}/><strong>{pageTitle}</strong></div></div>
-        <div className="topbar-right"><div className="sync-status"><span className="online-pulse"/><span>Cloud connected</span></div><button className="top-icon" onClick={() => setShowCommand(true)} aria-label="Search workspace"><Search size={17}/><kbd>⌘ K</kbd></button><button className="top-icon notification" aria-label="Notifications"><Bell size={17}/><i/></button><div className="top-avatar">{(session.user.email?.[0] ?? "U").toUpperCase()}</div></div>
+        <div className="topbar-right"><div className="sync-status"><span className="online-pulse"/><span>{page === "Local IDE" ? "Local worker mode" : "Cloud connected"}</span></div><button className="top-icon" onClick={() => setShowCommand(true)} aria-label="Search workspace"><Search size={17}/><kbd>⌘ K</kbd></button><button className="top-icon notification" aria-label="Notifications"><Bell size={17}/><i/></button><div className="top-avatar">{(session.user.email?.[0] ?? "U").toUpperCase()}</div></div>
       </header>
       <div className="page-body">
         <div className="page-intro"><div><div className="eyebrow"><span className="eyebrow-mark"/> PROJECT CONTROL / {project ? project.status.toUpperCase() : "SETUP"}</div><h1>{page === "Overview" ? <>The work, <em>in context.</em></> : pageTitle}</h1><p>{pageDescription[page]}</p></div><div className="intro-actions"><button className="button secondary" onClick={() => void loadProjectData()}><Radio size={15}/> Refresh</button><button className="button primary" onClick={() => project ? setShowTaskForm(true) : setShowProjectForm(true)}><Plus size={16}/>{project ? "New task" : "New project"}</button></div></div>
 
         {loadError && <div className="inline-error"><ShieldEllipsis size={16}/><span>{loadError}</span></div>}
-        {!project ? <section className="empty-project panel"><div className="empty-stamp"><Boxes size={24}/></div><div className="eyebrow">NO PROJECT SELECTED</div><h2>Give the work a home.</h2><p>Create your first shared project. Its tasks, decisions, audit history, locks, and agent activity will live in the cloud—not in a single PC or chat.</p><button className="button primary" onClick={() => setShowProjectForm(true)}><Plus size={16}/> Create the first project</button></section> :
+        {page === "Local IDE" ? <LocalIDE/> : !project ? <section className="empty-project panel"><div className="empty-stamp"><Boxes size={24}/></div><div className="eyebrow">NO PROJECT SELECTED</div><h2>Give the work a home.</h2><p>Create your first shared project. Its tasks, decisions, audit history, locks, and agent activity will live in the cloud—not in a single PC or chat.</p><button className="button primary" onClick={() => setShowProjectForm(true)}><Plus size={16}/> Create the first project</button></section> :
         page === "Code Workbench" ? <CodeWorkbench key={project.id} projectId={project.id} userId={currentUserId ?? ""} isOwner={isOwner} onNotify={notify}/> :
         page === "Overview" ? <>
           <div className="overview-ribbon"><div className="ribbon-copy"><div className="ribbon-icon"><Zap size={17}/></div><div><strong>{project.name}</strong><span>{project.description || "Shared project space"} · Live workspace</span></div></div><div className="ribbon-meta"><span><Users size={15}/> Shared with your team</span><span><Clock3 size={15}/> Updated live</span></div></div>

@@ -28,8 +28,8 @@
 
 ## Phase 3 — Engineering traceability
 - [x] Cloud Code Workbench: explorer, syntax-aware editor, multi-tab editing, version history, protected files, and optimistic save conflicts
-- [ ] Repository integration: map cloud code files to real Git worktrees and remote repositories
-- [ ] Local terminal/build/test worker bridge
+- [x] Local worker bridge: actual checkout file edits, Git status/diff, allowlisted build/test tasks, explicit local commit
+- [ ] Managed remote repository integration, pull/push workflows, and worker identity/leases
 - [ ] Commits, branches, pull requests
 - [ ] Test cases and test-run records
 - [ ] Artifact/log storage

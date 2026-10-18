@@ -47,9 +47,9 @@ After signing in and creating a project, open Settings → Members and enter the
 
 The function uses Supabase's server-side service-role environment key. Never put that key in the web client, desktop bundle, GitHub, or a prompt.
 
-## Code Workbench
+## Code Workbench and Local IDE
 
-The Code Workbench stores project files in the cloud database, provides syntax-aware editing for common web/Python/JSON/Markdown languages, records prior contents on save, and exposes multiple file tabs plus an explorer. It uses version-checked writes and an explicit conflict recovery path to avoid silently overwriting a concurrent edit; owner file locks and resource-scoped grants apply. These records are not yet a Git checkout. Local repository worktrees, terminal/command execution, compiler/test runner, and secure worker service are separate future integration work.
+Code Workbench stores versioned files in Supabase and protects against concurrent cloud edits. Local IDE connects to the opt-in worker in `services/worker` to edit a real checkout, inspect Git status/diffs, run allowlisted build/test/lint/typecheck commands, and create an explicit local commit for the selected file. The worker binds to loopback, requires a random bearer token, filters secret files, and never pushes or deploys. Each developer PC runs its own worker and checkout. Configure `CONTINUUM_ALLOWED_ORIGINS` with the exact Vercel origin before using the hosted frontend.
 
 ## Status and remaining work
 

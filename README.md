@@ -12,12 +12,13 @@ CONTINUUM is a cloud-synchronized project workspace for managing engineering wor
 - Realtime refresh for tasks, activity, locks, permission requests, agent runs, and worker status
 - Project creation, task creation, task status updates, and project activity audit events
 - Code Workbench with a file explorer, multi-tab syntax-aware editor, search shortcuts, version history, protected files, and conflict-safe cloud saves
+- Local IDE companion for editing a real checkout, inspecting Git status/diffs, running allowlisted build/test commands, and creating explicit local commits
 - Database-enforced resource locks and time-limited permission grants
 - Supabase Edge Function for invite-only project-member invitations
 - Electron desktop shell and Windows installer workflow with a license-acceptance page
 - Product, architecture, cloud deployment, security, data model, and roadmap documentation
 
-The Code Workbench edits versioned files stored in the shared cloud workspace. It is not yet a local Git checkout and does not run a terminal, compiler, or test command. Those need the companion worker service. Worker leases/heartbeats, the RELAY adapter, cross-runtime handoff execution, and test-runner integration still require further implementation. The dashboard marks unconfigured areas honestly rather than inventing metrics.
+The Code Workbench edits versioned files stored in the shared cloud workspace. The separate Local IDE connects to a loopback-only worker on a developer PC for local file edits, Git status/diffs, allowlisted build/test tasks, and explicitly requested local commits. It never pushes or deploys automatically. Worker leases/heartbeats, the RELAY adapter, cross-runtime handoff execution, and test-runner integration still require further implementation. The dashboard marks unconfigured areas honestly rather than inventing metrics.
 
 ## Cloud architecture
 
@@ -55,6 +56,10 @@ Install and authenticate the Supabase CLI, link your hosted project, and apply t
     supabase functions deploy invite-project-member
 
 Configure Auth email delivery and allowed redirect URLs before inviting collaborators. Keep privileged server keys in the hosted function environment only. Never add a service-role key to a VITE_ variable.
+
+## Local IDE worker
+
+See `services/worker/README.md` to connect the Local IDE to a real checkout on your own PC. The worker must bind to `127.0.0.1`; configure its random bearer token and exact allowed browser origins. Each PC runs its own worker against its own clone.
 
 ## Desktop installer
 
