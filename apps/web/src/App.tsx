@@ -372,7 +372,59 @@ function App() {
 }
 
 function CloudSetup() {
-  return <div className="setup-screen"><div className="setup-top"><div className="brand-symbol"><Command size={22}/></div><span>CONTINUUM</span><span className="setup-pill">CLOUD CONFIGURATION</span></div><div className="setup-content"><div className="setup-illustration"><div className="setup-grid"/><div className="setup-node node-a"><HardDrive size={20}/></div><div className="setup-node node-b"><Users size={20}/></div><div className="setup-node node-c"><Radio size={20}/></div><div className="setup-link link-a"/><div className="setup-link link-b"/></div><div className="eyebrow">ONE SHARED SOURCE OF TRUTH</div><h1>Connect your<br/><em>cloud workspace.</em></h1><p>The dashboard is built for multiple PCs to share the same project state. Add a hosted Supabase project to enable sign-in, persistent tasks, protected resources, audit history, and live synchronization.</p><div className="setup-steps"><div><span>01</span><div><strong>Create the cloud database</strong><small>Create a Supabase project and apply the checked-in migration.</small></div><a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer">Open Supabase ↗</a></div><div><span>02</span><div><strong>Set frontend environment values</strong><small>Configure the project URL and publishable key in Vercel or <code>apps/web/.env.local</code>.</small></div></div><div><span>03</span><div><strong>Deploy the dashboard</strong><small>Deploy <code>apps/web</code> to Vercel. Both PCs then sign in to the same cloud workspace.</small></div><a href="https://vercel.com/new" target="_blank" rel="noreferrer">Open Vercel ↗</a></div></div><div className="setup-warning"><ShieldCheck size={17}/><span>No sample project data is being shown as real. The dashboard will activate when the cloud URL and publishable key are configured.</span></div></div><footer className="setup-footer">PRIVATE WORKSPACE <i/> CLOUD-FIRST ARCHITECTURE <i/> AUTHENTICATED ACCESS</footer></div>;
+  const [cloudUrl, setCloudUrl] = useState(import.meta.env.VITE_SUPABASE_URL ?? "");
+  const [publishableKey, setPublishableKey] = useState(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "");
+  const [setupError, setSetupError] = useState("");
+  const [savingConfig, setSavingConfig] = useState(false);
+
+  function saveCloudConfig(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSetupError("");
+    let parsed: URL;
+    try { parsed = new URL(cloudUrl.trim()); }
+    catch { setSetupError("Enter the full Supabase project URL."); return; }
+    const loopback = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+    if (parsed.protocol !== "https:" && !(loopback && parsed.protocol === "http:")) {
+      setSetupError("Use an HTTPS hosted URL, or HTTP only for a local development server.");
+      return;
+    }
+    if (!publishableKey.trim()) { setSetupError("Enter the Supabase publishable key (not a service-role key)."); return; }
+    setSavingConfig(true);
+    try {
+      window.localStorage.setItem("continuum.cloud.config", JSON.stringify({
+        url: parsed.origin,
+        publishableKey: publishableKey.trim()
+      }));
+      window.location.reload();
+    } catch {
+      setSavingConfig(false);
+      setSetupError("This browser could not save settings. Enable local storage or set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY at build time.");
+    }
+  }
+
+  return <div className="setup-screen">
+    <div className="setup-top"><div className="brand-symbol"><Command size={22}/></div><span>CONTINUUM</span><span className="setup-pill">CLOUD CONFIGURATION</span></div>
+    <div className="setup-content">
+      <div className="setup-illustration"><div className="setup-grid"/><div className="setup-node node-a"><HardDrive size={20}/></div><div className="setup-node node-b"><Users size={20}/></div><div className="setup-node node-c"><Radio size={20}/></div><div className="setup-link link-a"/><div className="setup-link link-b"/></div>
+      <div className="eyebrow">ONE SHARED SOURCE OF TRUTH</div>
+      <h1>Connect your<br/><em>cloud workspace.</em></h1>
+      <p>Connect the hosted project you and your partner will share. Both the web app and desktop build can sign into the same cloud workspace—neither PC hosts the central backend.</p>
+      <div className="setup-steps">
+        <div><span>01</span><div><strong>Create the cloud database</strong><small>Create a hosted Supabase project, then apply the checked-in database migrations.</small></div><a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer">Open Supabase ↗</a></div>
+        <div><span>02</span><div><strong>Connect this installation</strong><small>Paste the project URL and publishable key below. Values are saved in this browser/desktop profile.</small></div></div>
+        <div><span>03</span><div><strong>Deploy from your chosen Vercel account</strong><small>Import this repository there with the root directory set to <code>apps/web</code>, or use the desktop installer.</small></div><a href="https://vercel.com/new" target="_blank" rel="noreferrer">Open Vercel ↗</a></div>
+      </div>
+      <form className="cloud-config-form" onSubmit={saveCloudConfig}>
+        <label>Supabase project URL<input type="url" autoComplete="url" required value={cloudUrl} onChange={event=>setCloudUrl(event.target.value)} placeholder="https://your-project.supabase.co"/></label>
+        <label>Supabase publishable key<input type="password" autoComplete="off" required value={publishableKey} onChange={event=>setPublishableKey(event.target.value)} placeholder="sb_publishable_…"/></label>
+        <div className="cloud-key-note"><ShieldCheck size={15}/><span>Use the publishable/anon client key with Row Level Security enabled. Never enter a service-role or secret key here.</span></div>
+        {setupError && <div className="setup-form-error"><AlertTriangle size={14}/>{setupError}</div>}
+        <button className="button primary full" type="submit" disabled={savingConfig}>{savingConfig?"Connecting…":"Save cloud connection"} <ArrowDownRight size={15}/></button>
+      </form>
+      <div className="setup-warning"><ShieldCheck size={17}/><span>This does not connect to any hosting account. The cloud backend becomes usable after you apply the migration and configure authentication.</span></div>
+    </div>
+    <footer className="setup-footer">PRIVATE WORKSPACE <i/> CLOUD-FIRST ARCHITECTURE <i/> AUTHENTICATED ACCESS</footer>
+  </div>;
 }
 
 function MetricCard({ label, value, note, icon: Icon, accent, progress }: {label:string;value:string;note:string;icon:typeof Target;accent:string;progress?:number}) {

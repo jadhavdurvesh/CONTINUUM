@@ -1,7 +1,30 @@
 import { createClient } from "@supabase/supabase-js";
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+type RuntimeCloudConfig = { url: string; publishableKey: string };
+
+function readRuntimeCloudConfig(): RuntimeCloudConfig | null {
+  try {
+    const raw = window.localStorage.getItem("continuum.cloud.config");
+    if (!raw) return null;
+    const config = JSON.parse(raw) as Partial<RuntimeCloudConfig>;
+    if (typeof config.url === "string" && typeof config.publishableKey === "string"
+      && config.url.trim() && config.publishableKey.trim()) {
+      return { url: config.url.trim(), publishableKey: config.publishableKey.trim() };
+    }
+  } catch {
+    // localStorage can be unavailable in restricted browser contexts.
+  }
+  return null;
+}
+
+const runtimeConfig = typeof window !== "undefined" ? readRuntimeCloudConfig() : null;
+const envUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const envKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+
+// Build-time values take precedence. Desktop builds can be configured after
+// installation without embedding environment variables into the installer.
+const url = envUrl?.trim() || runtimeConfig?.url;
+const publishableKey = envKey?.trim() || runtimeConfig?.publishableKey;
 
 export const cloudConfigured = Boolean(url && publishableKey);
 export const supabase = cloudConfigured

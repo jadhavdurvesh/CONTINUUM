@@ -217,6 +217,19 @@ export default function CodeWorkbench({ projectId, userId, isOwner, onNotify }: 
     onNotify("Created "+file.path+".");
   }
 
+  async function requestEditGrant() {
+    if (!supabase || !selected || !isLocked) return;
+    const { error: requestError } = await supabase.from("permission_requests").insert({
+      project_id: projectId,
+      resource_type: "code_file",
+      resource_id: selected.id,
+      requested_action: "edit",
+      reason: "Requesting permission to edit " + selected.path
+    });
+    if (requestError) onNotify(requestError.message);
+    else onNotify("Edit request sent to the project owner.");
+  }
+
   async function toggleLock() {
     if (!supabase || !selected || !isOwner) return;
     if (lock) {
@@ -312,7 +325,7 @@ export default function CodeWorkbench({ projectId, userId, isOwner, onNotify }: 
         {conflict&&<div className="ide-conflict"><AlertTriangle size={15}/><div><strong>Cloud version changed</strong><span>Your editor draft is preserved. Load the latest cloud copy, or keep your draft and manually reconcile before saving.</span></div><button onClick={()=>{setFiles(current=>current.map(file=>file.id===conflict.id?conflict:file));setDraft(conflict.content);setDirty(false);setConflict(null);}}>Load cloud version</button><button className="ide-conflict-dismiss" onClick={()=>setConflict(null)} title="Keep draft"><X size={14}/></button></div>}
         {showHistory&&selected?<div className="ide-history-view"><div className="ide-history-heading"><div><span>VERSION CONTROL</span><h3>Saved history</h3><p>Older saved contents are retained as read-only snapshots.</p></div><button className="ide-icon-button" onClick={()=>setShowHistory(false)}><X size={16}/></button></div>{loadingHistory?<div className="ide-history-empty">Loading history…</div>:history.length===0?<div className="ide-history-empty">No previous versions yet. Your first change will create history.</div>:<div className="ide-history-list">{history.map(version=><div className="ide-history-row" key={version.id}><div className="history-version">v{version.version}</div><div className="history-copy"><strong>{version.path}</strong><span>{new Date(version.saved_at).toLocaleString()} · {version.saved_by===userId?"You":"Collaborator"}</span></div><button onClick={()=>restoreVersion(version)} disabled={!canEdit}>Load draft</button></div>)}</div>}</div>:selected?<div className="ide-editor-wrap">
           <div className="ide-file-meta"><div><FileCode2 size={14}/><span>{selected.path}</span><span className="ide-meta-dot">·</span><span>{selected.language}</span><span className="ide-version">v{selected.version}</span></div><div className="ide-file-state">{isLocked&&!canEdit?<span className="ide-state-locked"><LockKeyhole size={12}/> Protected</span>:dirty?<span className="ide-state-dirty"><i/> Unsaved</span>:<span className="ide-state-saved"><Check size={12}/>{lastSaved?"Saved "+lastSaved:"Saved to cloud"}</span>}</div></div>
-          {isLocked&&!canEdit&&<div className="ide-locked-banner"><LockKeyhole size={14}/><span>This file is protected. Request a temporary edit grant or ask the owner to unlock it.</span></div>}
+          {isLocked&&!canEdit&&<div className="ide-locked-banner"><LockKeyhole size={14}/><span>This file is protected. Request a temporary edit grant or ask the owner to unlock it.</span>{!isOwner&&<button type="button" onClick={()=>void requestEditGrant()}>Request edit grant</button>}</div>}
           <div className="ide-code-area"><CodeMirror value={draft} height="100%" theme={editorTheme} extensions={langs} editable={canEdit} readOnly={!canEdit} onChange={value=>{setDraft(value);setDirty(value!==selected.content);setConflict(null);}} basicSetup={{lineNumbers:true,foldGutter:true,highlightActiveLine:true,highlightActiveLineGutter:true,closeBrackets:true,autocompletion:true,indentOnInput:true,searchKeymap:true}}/></div>
           <div className="ide-statusbar"><div><span className="statusbar-branch"><GitBranch size={12}/> cloud-workspace</span><span>UTF-8</span><span>{selected.language}</span><span>v{selected.version}</span></div><div><span>{draft.split("\n").length} lines</span><span>{new TextEncoder().encode(draft).length.toLocaleString()} bytes</span><button className="ide-save-button" onClick={()=>void saveFile()} disabled={!dirty||saving||!canEdit}>{saving?<RefreshCw size={13}/>:<Save size={13}/>} {saving?"Saving":dirty?"Save changes":"Saved"} <kbd>Ctrl S</kbd></button></div></div>
         </div>:<div className="ide-welcome"><div className="ide-welcome-mark"><Code2 size={27}/></div><div className="ide-welcome-kicker">CONTINUUM / CODE WORKBENCH</div><h2>Make the next change<br/><em>with the whole project in view.</em></h2><p>Choose a source file from the explorer or create one. Saves are versioned and sync to other signed-in workspace members.</p><button className="ide-action primary" onClick={()=>setShowCreate(true)}><FilePlus2 size={15}/> Create a file</button><div className="ide-shortcuts"><span><kbd>Ctrl</kbd> <kbd>S</kbd> Save</span><span><kbd>Ctrl</kbd> <kbd>P</kbd> Find files</span></div></div>}
