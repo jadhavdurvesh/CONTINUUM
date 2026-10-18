@@ -30,6 +30,8 @@ Official references: [Supabase RLS](https://supabase.com/docs/guides/database/po
 
 ## Vercel setup
 
+Deploy from the Vercel account you intend to use for this project. No Vercel project or deployment is linked by the repository commits in this change. In that account:
+
 1. Import the GitHub repository into Vercel.
 2. Set Root Directory to apps/web.
 3. Configure these environment variables for Production and Preview:
@@ -47,7 +49,7 @@ The function uses Supabase's server-side service-role environment key. Never put
 
 ## Code Workbench
 
-The Code Workbench stores project files in the cloud database, provides syntax-aware editing for common web/Python/JSON/Markdown languages, and records prior contents on save. It performs version-checked writes to avoid silently overwriting a concurrent edit, supports owner file locks, and uses resource-scoped edit grants. These files are not yet a Git checkout. The local repository worktree, terminal, compiler/test command runner, and secure worker service are separate future integration work.
+The Code Workbench stores project files in the cloud database, provides syntax-aware editing for common web/Python/JSON/Markdown languages, records prior contents on save, and exposes multiple file tabs plus an explorer. It uses version-checked writes and an explicit conflict recovery path to avoid silently overwriting a concurrent edit; owner file locks and resource-scoped grants apply. These records are not yet a Git checkout. Local repository worktrees, terminal/command execution, compiler/test runner, and secure worker service are separate future integration work.
 
 ## Status and remaining work
 

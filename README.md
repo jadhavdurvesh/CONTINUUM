@@ -11,14 +11,18 @@ CONTINUUM is a cloud-synchronized project workspace for managing engineering wor
 - Hosted Supabase Auth + PostgreSQL + Row Level Security for shared state
 - Realtime refresh for tasks, activity, locks, permission requests, agent runs, and worker status
 - Project creation, task creation, task status updates, and project activity audit events
+- Code Workbench with a file explorer, multi-tab syntax-aware editor, search shortcuts, version history, protected files, and conflict-safe cloud saves
 - Database-enforced resource locks and time-limited permission grants
 - Supabase Edge Function for invite-only project-member invitations
 - Electron desktop shell and Windows installer workflow with a license-acceptance page
 - Product, architecture, cloud deployment, security, data model, and roadmap documentation
 
-Worker leases/heartbeats, the RELAY adapter, cross-runtime handoff execution, and test-runner integration still require further implementation. The dashboard marks unconfigured areas honestly rather than inventing metrics.
+The Code Workbench edits versioned files stored in the shared cloud workspace. It is not yet a local Git checkout and does not run a terminal, compiler, or test command. Those need the companion worker service. Worker leases/heartbeats, the RELAY adapter, cross-runtime handoff execution, and test-runner integration still require further implementation. The dashboard marks unconfigured areas honestly rather than inventing metrics.
 
 ## Cloud architecture
+
+The web application is not deployed by these commits. In your own Vercel account, import this repository and set its root directory to `apps/web`; then configure the Supabase URL and publishable key as environment variables. See `docs/cloud-deployment.md`.
+
 
 - Web dashboard: Vercel, project root apps/web
 - Shared backend: hosted Supabase Auth, PostgreSQL, RLS, and Realtime

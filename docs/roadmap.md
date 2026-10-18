@@ -27,7 +27,9 @@
 - [ ] Audit history and versioning
 
 ## Phase 3 — Engineering traceability
-- [ ] Repository integration
+- [x] Cloud Code Workbench: explorer, syntax-aware editor, multi-tab editing, version history, protected files, and optimistic save conflicts
+- [ ] Repository integration: map cloud code files to real Git worktrees and remote repositories
+- [ ] Local terminal/build/test worker bridge
 - [ ] Commits, branches, pull requests
 - [ ] Test cases and test-run records
 - [ ] Artifact/log storage

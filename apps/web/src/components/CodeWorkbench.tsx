@@ -58,6 +58,7 @@ export default function CodeWorkbench({ projectId, userId, isOwner, onNotify }: 
   const [selectedId, setSelectedId] = useState("");
   const [tabs, setTabs] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
+  const [draftBaseVersion, setDraftBaseVersion] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -117,11 +118,13 @@ export default function CodeWorkbench({ projectId, userId, isOwner, onNotify }: 
   useEffect(() => {
     if (!selected) {
       setDraft("");
+      setDraftBaseVersion(null);
       setDirty(false);
       return;
     }
     if (dirtyRef.current && selected.id === selectedRef.current) return;
     setDraft(selected.content);
+    setDraftBaseVersion(selected.version);
     setDirty(false);
     setConflict(null);
   }, [selected?.id,selected?.version]);
@@ -159,43 +162,54 @@ export default function CodeWorkbench({ projectId, userId, isOwner, onNotify }: 
   },[projectId,userId,refresh]);
 
   function openFile(file: CodeFile) {
+    if (file.id === selectedId) return;
     if (dirty && selected && selected.id!==file.id && !window.confirm("Discard unsaved edits and open another file?")) return;
     setSelectedId(file.id);
     setTabs(current=>current.includes(file.id)?current:[...current,file.id]);
     setDraft(file.content);
+    setDraftBaseVersion(file.version);
     setDirty(false);
     setShowHistory(false);
     setConflict(null);
   }
 
   async function saveFile() {
-    if (!supabase || !selected || saving || !dirty || !canEdit) return;
-    if (new TextEncoder().encode(draft).length>1500000) { onNotify("This file exceeds the 1.5 MB limit."); return; }
+    if (!supabase || !selected || saving || !dirty || !canEdit || conflict) return;
+    const baseVersion = draftBaseVersion;
+    const submittedDraft = draft;
+    if (baseVersion === null) { onNotify("Reload the file before saving."); return; }
+    if (new TextEncoder().encode(submittedDraft).length > 1500000) { onNotify("This file exceeds the 1.5 MB limit."); return; }
     setSaving(true);
     setError("");
-    const {data,error:saveError}=await supabase.from("code_files").update({content:draft,updated_by:userId})
-      .eq("id",selected.id).eq("version",selected.version).select("*").maybeSingle();
+    const { data, error: saveError } = await supabase.from("code_files")
+      .update({ content: submittedDraft, updated_by: userId })
+      .eq("id", selected.id).eq("version", baseVersion).select("*").maybeSingle();
     setSaving(false);
     if (saveError) {
       setError(saveError.message);
-      onNotify(saveError.message.toLowerCase().includes("protected")?"File is protected. Request permission or ask the owner to unlock it.":"Save failed; your editor draft remains.");
+      onNotify(saveError.message.toLowerCase().includes("protected") ? "File is protected. Request permission or ask the owner to unlock it." : "Save failed; your editor draft remains.");
       return;
     }
     if (!data) {
-      const latest=await supabase.from("code_files").select("*").eq("id",selected.id).maybeSingle();
+      const latest = await supabase.from("code_files").select("*").eq("id", selected.id).maybeSingle();
       if (latest.data) setConflict(latest.data as CodeFile);
-      onNotify("A collaborator changed this file. Your draft is preserved; resolve the conflict before retrying.");
+      onNotify("A collaborator changed this file. Your draft is preserved; copy it and load the latest version to merge safely.");
       return;
     }
-    const saved=data as CodeFile;
-    setFiles(current=>current.map(file=>file.id===saved.id?saved:file));
-    setDraft(saved.content);
-    setDirty(false);
+    const saved = data as CodeFile;
+    setFiles(current => current.map(file => file.id === saved.id ? saved : file));
+    setDraftBaseVersion(saved.version);
     setConflict(null);
-    setLastSaved(new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}));
-    onNotify("Saved version "+saved.version+".");
+    if (draftRef.current === submittedDraft) {
+      setDraft(saved.content);
+      setDirty(false);
+    } else {
+      // Preserve additional keystrokes made while the save request was in flight.
+      setDirty(true);
+    }
+    setLastSaved(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+    onNotify("Saved version " + saved.version + ".");
   }
-
   async function createFile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase) return;
@@ -210,6 +224,7 @@ export default function CodeWorkbench({ projectId, userId, isOwner, onNotify }: 
     setSelectedId(file.id);
     setTabs(current=>[...new Set([...current,file.id])]);
     setDraft(file.content);
+    setDraftBaseVersion(file.version);
     setDirty(false);
     setNewPath("");
     setNewContent("");
@@ -256,6 +271,7 @@ export default function CodeWorkbench({ projectId, userId, isOwner, onNotify }: 
     if (dirty && !window.confirm("Replace your unsaved draft with this historical version?")) return;
     setDraft(version.content);
     setDirty(true);
+    // Keep the current version as the save base; restoring an old snapshot creates a new version.
     setConflict(null);
     setShowHistory(false);
     onNotify("Historical version loaded as a draft. Save to create a new version.");
@@ -315,19 +331,19 @@ export default function CodeWorkbench({ projectId, userId, isOwner, onNotify }: 
       <div className="ide-editor-column">
         <div className="ide-tabs">
           {!sidebarVisible&&<button className="ide-tab-restore" onClick={()=>setSidebarVisible(true)} title="Show explorer"><PanelLeftOpen size={15}/></button>}
-          {tabs.map(id=>files.find(file=>file.id===id)).filter((file):file is CodeFile=>Boolean(file)).map(file=><button type="button" key={file.id} className={"ide-tab "+(file.id===selectedId?"current":"")} onClick={()=>openFile(file)}><FileCode2 size={13}/><span>{basename(file.path)}</span>{file.id===selectedId&&dirty&&<i/>}<span className="tab-close" onClick={event=>{event.stopPropagation();if(selectedId===file.id&&dirty&&!window.confirm("Close this tab and discard unsaved edits?"))return;setTabs(ids=>ids.filter(id=>id!==file.id));if(selectedId===file.id){setSelectedId("");setDraft("");setDirty(false);}}}><X size={12}/></span></button>)}
+          {tabs.map(id=>files.find(file=>file.id===id)).filter((file):file is CodeFile=>Boolean(file)).map(file=><button type="button" key={file.id} className={"ide-tab "+(file.id===selectedId?"current":"")} onClick={()=>openFile(file)}><FileCode2 size={13}/><span>{basename(file.path)}</span>{file.id===selectedId&&dirty&&<i/>}<span className="tab-close" onClick={event=>{event.stopPropagation();if(selectedId===file.id&&dirty&&!window.confirm("Close this tab and discard unsaved edits?"))return;setTabs(ids=>ids.filter(id=>id!==file.id));if(selectedId===file.id){setSelectedId("");setDraft("");setDraftBaseVersion(null);setDirty(false);setConflict(null);}}}><X size={12}/></span></button>)}
           {tabs.length===0&&<div className="ide-no-tab">No file open</div>}
           <div className="ide-tabs-spacer"/>
           {selected&&<button type="button" className={"ide-tab-action "+(showHistory?"on":"")} title="Version history" onClick={()=>showHistory?setShowHistory(false):void loadHistory()}><History size={15}/></button>}
           {selected&&<button type="button" className="ide-tab-action" title="File actions" onClick={()=>setFileActions(open=>!open)}><MoreHorizontal size={16}/></button>}
           {fileActions&&selected&&<div className="ide-file-menu">{isOwner&&<button onClick={()=>{setFileActions(false);onNotify("File: "+selected.path+" · version "+selected.version);}}><FileText size={14}/> File information</button>}{isOwner&&<button onClick={()=>{void toggleLock();setFileActions(false);}}><LockKeyhole size={14}/>{isLocked?"Unlock file":"Protect file"}</button>}{isOwner&&<button className="danger" disabled={isLocked} onClick={()=>{void deleteFile();setFileActions(false);}}><Trash2 size={14}/> Delete file</button>}</div>}
         </div>
-        {conflict&&<div className="ide-conflict"><AlertTriangle size={15}/><div><strong>Cloud version changed</strong><span>Your editor draft is preserved. Load the latest cloud copy, or keep your draft and manually reconcile before saving.</span></div><button onClick={()=>{setFiles(current=>current.map(file=>file.id===conflict.id?conflict:file));setDraft(conflict.content);setDirty(false);setConflict(null);}}>Load cloud version</button><button className="ide-conflict-dismiss" onClick={()=>setConflict(null)} title="Keep draft"><X size={14}/></button></div>}
+        {conflict&&<div className="ide-conflict"><AlertTriangle size={15}/><div><strong>Cloud version changed</strong><span>Your draft cannot overwrite a newer version. Copy your draft, load the latest cloud copy, then merge your changes and save.</span></div><button onClick={()=>{void navigator.clipboard.writeText(draft).then(()=>onNotify("Your unsaved draft was copied.")).catch(()=>onNotify("Clipboard access was blocked; select and copy your draft manually."));}}>Copy my draft</button><button onClick={()=>{setFiles(current=>current.map(file=>file.id===conflict.id?conflict:file));setDraft(conflict.content);setDraftBaseVersion(conflict.version);setDirty(false);setConflict(null);}}>Load cloud version</button></div>}
         {showHistory&&selected?<div className="ide-history-view"><div className="ide-history-heading"><div><span>VERSION CONTROL</span><h3>Saved history</h3><p>Older saved contents are retained as read-only snapshots.</p></div><button className="ide-icon-button" onClick={()=>setShowHistory(false)}><X size={16}/></button></div>{loadingHistory?<div className="ide-history-empty">Loading history…</div>:history.length===0?<div className="ide-history-empty">No previous versions yet. Your first change will create history.</div>:<div className="ide-history-list">{history.map(version=><div className="ide-history-row" key={version.id}><div className="history-version">v{version.version}</div><div className="history-copy"><strong>{version.path}</strong><span>{new Date(version.saved_at).toLocaleString()} · {version.saved_by===userId?"You":"Collaborator"}</span></div><button onClick={()=>restoreVersion(version)} disabled={!canEdit}>Load draft</button></div>)}</div>}</div>:selected?<div className="ide-editor-wrap">
           <div className="ide-file-meta"><div><FileCode2 size={14}/><span>{selected.path}</span><span className="ide-meta-dot">·</span><span>{selected.language}</span><span className="ide-version">v{selected.version}</span></div><div className="ide-file-state">{isLocked&&!canEdit?<span className="ide-state-locked"><LockKeyhole size={12}/> Protected</span>:dirty?<span className="ide-state-dirty"><i/> Unsaved</span>:<span className="ide-state-saved"><Check size={12}/>{lastSaved?"Saved "+lastSaved:"Saved to cloud"}</span>}</div></div>
           {isLocked&&!canEdit&&<div className="ide-locked-banner"><LockKeyhole size={14}/><span>This file is protected. Request a temporary edit grant or ask the owner to unlock it.</span>{!isOwner&&<button type="button" onClick={()=>void requestEditGrant()}>Request edit grant</button>}</div>}
-          <div className="ide-code-area"><CodeMirror value={draft} height="100%" theme={editorTheme} extensions={langs} editable={canEdit} readOnly={!canEdit} onChange={value=>{setDraft(value);setDirty(value!==selected.content);setConflict(null);}} basicSetup={{lineNumbers:true,foldGutter:true,highlightActiveLine:true,highlightActiveLineGutter:true,closeBrackets:true,autocompletion:true,indentOnInput:true,searchKeymap:true}}/></div>
-          <div className="ide-statusbar"><div><span className="statusbar-branch"><GitBranch size={12}/> cloud-workspace</span><span>UTF-8</span><span>{selected.language}</span><span>v{selected.version}</span></div><div><span>{draft.split("\n").length} lines</span><span>{new TextEncoder().encode(draft).length.toLocaleString()} bytes</span><button className="ide-save-button" onClick={()=>void saveFile()} disabled={!dirty||saving||!canEdit}>{saving?<RefreshCw size={13}/>:<Save size={13}/>} {saving?"Saving":dirty?"Save changes":"Saved"} <kbd>Ctrl S</kbd></button></div></div>
+          <div className="ide-code-area"><CodeMirror value={draft} height="100%" theme={editorTheme} extensions={langs} editable={canEdit} readOnly={!canEdit} onChange={value=>{setDraft(value);setDirty(value!==selected.content);}} basicSetup={{lineNumbers:true,foldGutter:true,highlightActiveLine:true,highlightActiveLineGutter:true,closeBrackets:true,autocompletion:true,indentOnInput:true,searchKeymap:true}}/></div>
+          <div className="ide-statusbar"><div><span className="statusbar-branch"><GitBranch size={12}/> cloud-workspace</span><span>UTF-8</span><span>{selected.language}</span><span>v{selected.version}</span></div><div><span>{draft.split("\n").length} lines</span><span>{new TextEncoder().encode(draft).length.toLocaleString()} bytes</span><button className="ide-save-button" onClick={()=>void saveFile()} disabled={!dirty||saving||!canEdit||Boolean(conflict)}>{saving?<RefreshCw size={13}/>:<Save size={13}/>} {saving?"Saving":dirty?"Save changes":"Saved"} <kbd>Ctrl S</kbd></button></div></div>
         </div>:<div className="ide-welcome"><div className="ide-welcome-mark"><Code2 size={27}/></div><div className="ide-welcome-kicker">CONTINUUM / CODE WORKBENCH</div><h2>Make the next change<br/><em>with the whole project in view.</em></h2><p>Choose a source file from the explorer or create one. Saves are versioned and sync to other signed-in workspace members.</p><button className="ide-action primary" onClick={()=>setShowCreate(true)}><FilePlus2 size={15}/> Create a file</button><div className="ide-shortcuts"><span><kbd>Ctrl</kbd> <kbd>S</kbd> Save</span><span><kbd>Ctrl</kbd> <kbd>P</kbd> Find files</span></div></div>}
         <div className="ide-bottom-panel"><div className="ide-bottom-title"><span><ChevronRight size={13}/> OUTPUT</span><span className="ide-output-label">WORKSPACE</span><button onClick={()=>onNotify("Terminal, Git worktrees and builds require the companion worker service; it is not enabled yet.")}>Terminal status</button></div><div className="ide-output-text">{error||(selected?"This editor saves shared cloud files. It does not execute code on your PC.":"Select or create a file to start. Files are shared across authorized workspace accounts.")}</div></div>
       </div>

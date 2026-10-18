@@ -6,7 +6,8 @@ The system is cloud-first for shared state and multi-PC coordination. It is not 
 
 - **Web UI:** React + TypeScript + Vite deployed to Vercel.
 - **Identity and shared data:** hosted Supabase Auth + PostgreSQL + Row Level Security.
-- **Live collaboration:** Supabase Realtime for authorized task/activity updates and presence.
+- **Live collaboration:** Supabase Realtime for authorized task/activity updates, code-file changes, locks, and permission requests.
+- **Code Workbench:** CodeMirror in the dashboard, with versioned cloud file records and optimistic version checks. It does not yet modify a local Git checkout or run commands.
 - **Privileged operations:** Supabase SQL functions and Edge Functions. Secret keys never ship in the browser or desktop installer.
 - **Workers:** a small worker service on each authorized PC performs local coding work and reports task status/checkpoints to the cloud control plane.
 - **Model routing:** the existing RELAY service remains the provider-routing/failover layer.
@@ -18,7 +19,7 @@ The system is cloud-first for shared state and multi-PC coordination. It is not 
 - Coding-agent runtime decides how to perform a coding task.
 - RELAY routes model requests across providers and handles model-provider failover.
 - Cloud database stores durable project state, permissions, checkpoints, and provenance.
-- Git records code history.
+- Git records repository history once the worker/repository adapter is connected; the initial Code Workbench has its own database-backed file history.
 - Test-run records and artifacts provide evidence of test outcomes.
 - Local workers execute code but do not become the source of truth.
 
@@ -46,4 +47,4 @@ The system is cloud-first for shared state and multi-PC coordination. It is not 
 
 ## Important implementation status
 
-The current first milestone implements cloud-authenticated task creation/status updates, realtime refresh, project activity, and database-enforced task locks after the migration is applied and a Supabase project is configured. It defines the agent-run/worker-node schema and interface surfaces, but does **not** yet include a complete worker gateway, secure worker token issuance, lease/claim RPC, checkpoint transport, or RELAY runtime adapter. Those must be implemented and tested before autonomous multi-PC execution is enabled.
+The current milestone implements cloud-authenticated task creation/status updates, realtime refresh, project activity, versioned cloud code files, conflict-checked saves, code-file locks, and database-enforced task locks after migrations are applied and a Supabase project is configured. It defines the agent-run/worker-node schema and interface surfaces, but does **not** yet include a complete worker gateway, secure worker token issuance, lease/claim RPC, checkpoint transport, or RELAY runtime adapter. Those must be implemented and tested before autonomous multi-PC execution is enabled.
