@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import {
-  Activity, ArrowDownRight, ArrowUpRight, Bell, BookOpen, Bot, Boxes, Code2,
+  Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, Bell, BookOpen, Bot, Boxes, Code2,
   Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, Command,
   FileText, FlaskConical, HardDrive, LayoutGrid, LockKeyhole, LogOut,
   Menu, Plus, Radio, Search, Settings2, ShieldCheck, ShieldEllipsis,
