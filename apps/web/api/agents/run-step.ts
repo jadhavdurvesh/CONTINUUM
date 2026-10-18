@@ -75,7 +75,7 @@ async function askProvider(prompt: string): Promise<{ text: string; provider: st
             { role: "user", content: prompt },
           ],
         }),
-        signal: AbortSignal.timeout(50000),
+        signal: AbortSignal.timeout(15000),
       });
       const result = await response.json() as any;
       if (!response.ok) throw new Error("provider returned HTTP " + response.status + " " + (result?.error?.message || ""));
