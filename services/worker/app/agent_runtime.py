@@ -41,7 +41,7 @@ def parse_agent_payload(raw: str) -> dict[str, Any]:
     text = raw.strip()
     fence = chr(96) * 3
     if text.startswith(fence):
-        newline = text.find("\\n")
+        newline = text.find("\n")
         text = text[newline + 1:] if newline >= 0 else text[len(fence):]
         if text.rstrip().endswith(fence):
             text = text.rstrip()[:-len(fence)].rstrip()
