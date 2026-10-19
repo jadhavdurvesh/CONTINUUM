@@ -959,6 +959,344 @@ class ContinuumWindow(QMainWindow):
 
         visit(self.workspace_tree.invisibleRootItem())
 
+    def _workspace_files(self, limit: int = 2500) -> list[Path]:
+        """List safe, user-facing workspace files without following symlinks."""
+        if not self.workspace or not self.workspace.is_dir():
+            return []
+        found: list[Path] = []
+        for folder, directories, filenames in os.walk(self.workspace):
+            current = Path(folder)
+            relative_folder = current.relative_to(self.workspace)
+            directories[:] = [
+                name for name in sorted(directories, key=str.casefold)
+                if not (current / name).is_symlink()
+                and not should_ignore_path(relative_folder / name)
+            ]
+            for name in sorted(filenames, key=str.casefold):
+                path = current / name
+                try:
+                    relative = path.relative_to(self.workspace)
+                    if path.is_symlink() or should_ignore_path(relative) or not path.is_file():
+                        continue
+                    if path.stat().st_size > MAX_TEXT_BYTES:
+                        continue
+                except OSError:
+                    continue
+                found.append(path)
+                if len(found) >= limit:
+                    return found
+        return found
+
+    def quick_open(self):
+        """Quickly locate and open a file using Ctrl+P."""
+        if not self.workspace:
+            self.choose_workspace()
+            if not self.workspace:
+                return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Quick Open")
+        dialog.setObjectName("quickOpenDialog")
+        dialog.resize(680, 510)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(14, 14, 14, 12)
+        heading = QLabel("QUICK OPEN")
+        heading.setObjectName("sectionLabel")
+        layout.addWidget(heading)
+        query = QLineEdit()
+        query.setObjectName("explorerFilter")
+        query.setPlaceholderText("Type a file name or relative path…")
+        query.setClearButtonEnabled(True)
+        layout.addWidget(query)
+        results = QListWidget()
+        results.setObjectName("quickOpenList")
+        layout.addWidget(results, 1)
+        tip = QLabel("Enter to open  ·  Esc to close  ·  Ctrl+P to reopen")
+        tip.setObjectName("muted")
+        layout.addWidget(tip)
+        files = self._workspace_files()
+        for path in files:
+            item = QListWidgetItem(str(path.relative_to(self.workspace)).replace("\\", "/"))
+            item.setData(Qt.ItemDataRole.UserRole, str(path))
+            results.addItem(item)
+
+        def apply_filter(value):
+            needle = value.casefold().strip()
+            visible = []
+            for i in range(results.count()):
+                item = results.item(i)
+                match = not needle or needle in item.text().casefold()
+                item.setHidden(not match)
+                if match:
+                    visible.append(item)
+            if visible:
+                results.setCurrentItem(visible[0])
+            else:
+                results.setCurrentItem(None)
+
+        selected: dict[str, str] = {}
+
+        def open_selected(_item=None):
+            item = _item or results.currentItem()
+            if item is None or item.isHidden():
+                return
+            selected["path"] = str(item.data(Qt.ItemDataRole.UserRole))
+            dialog.accept()
+
+        query.textChanged.connect(apply_filter)
+        results.itemActivated.connect(open_selected)
+        query.returnPressed.connect(open_selected)
+        apply_filter("")
+        query.setFocus()
+        if dialog.exec() == QDialog.DialogCode.Accepted and selected.get("path"):
+            self.open_file(Path(selected["path"]))
+
+    def show_command_palette(self):
+        """Command palette for common workspace and editor operations."""
+        commands = [
+            ("Open Folder…", "Ctrl+Shift+O", self.choose_workspace),
+            ("Quick Open File…", "Ctrl+P", self.quick_open),
+            ("Create New File…", "Ctrl+N", self.new_file),
+            ("Save Current File", "Ctrl+S", self.save_current),
+            ("Find in Current File…", "Ctrl+F", self.find_in_editor),
+            ("Replace in Current File…", "Ctrl+H", self.replace_in_editor),
+            ("Search in Workspace…", "Ctrl+Shift+F", self.search_workspace),
+            ("Toggle Explorer", "Ctrl+B", lambda: self.toggle_explorer()),
+            ("Toggle Cloud & Agents", "Ctrl+Alt+B", lambda: self.toggle_cloud_panel()),
+            ("Toggle Integrated Terminal", "Ctrl+" + chr(96), lambda: self.toggle_terminal()),
+            ("Refresh Explorer", "", self.refresh_tree),
+            ("Switch to Light Theme", "", lambda: self.apply_theme("light")),
+            ("Switch to Dark Theme", "", lambda: self.apply_theme("dark")),
+        ]
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Command Palette")
+        dialog.setObjectName("commandPaletteDialog")
+        dialog.resize(630, 480)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(14, 14, 14, 12)
+        query = QLineEdit()
+        query.setObjectName("explorerFilter")
+        query.setPlaceholderText("Type a command…")
+        layout.addWidget(query)
+        results = QListWidget()
+        results.setObjectName("quickOpenList")
+        layout.addWidget(results, 1)
+        for index, (name, shortcut, _callback) in enumerate(commands):
+            suffix = "  ·  " + shortcut if shortcut else ""
+            item = QListWidgetItem(name + suffix)
+            item.setData(Qt.ItemDataRole.UserRole, index)
+            results.addItem(item)
+
+        selected: dict[str, Any] = {}
+
+        def apply_filter(value):
+            needle = value.casefold().strip()
+            visible = []
+            for i in range(results.count()):
+                item = results.item(i)
+                match = not needle or needle in item.text().casefold()
+                item.setHidden(not match)
+                if match:
+                    visible.append(item)
+            results.setCurrentItem(visible[0] if visible else None)
+
+        def run_selected(_item=None):
+            item = _item or results.currentItem()
+            if item is None or item.isHidden():
+                return
+            index = int(item.data(Qt.ItemDataRole.UserRole))
+            selected["callback"] = commands[index][2]
+            dialog.accept()
+
+        query.textChanged.connect(apply_filter)
+        query.returnPressed.connect(run_selected)
+        results.itemActivated.connect(run_selected)
+        apply_filter("")
+        query.setFocus()
+        if dialog.exec() == QDialog.DialogCode.Accepted and selected.get("callback"):
+            selected["callback"]()
+
+    def find_in_editor(self):
+        path, editor = self.current_editor()
+        if editor is None:
+            self.statusBar().showMessage("Open a file before using Find.", 4000)
+            return
+        initial = editor.textCursor().selectedText()
+        text, accepted = QInputDialog.getText(self, "Find in current file", "Find text:", text=initial)
+        if not accepted or not text:
+            return
+        if not editor.find(text):
+            cursor = editor.textCursor()
+            cursor.movePosition(QTextCursor.MoveOperation.Start)
+            editor.setTextCursor(cursor)
+            if not editor.find(text):
+                QMessageBox.information(self, "Find", "No matches found in the current file.")
+                return
+        self.statusBar().showMessage("Found in " + Path(path).name, 3000)
+
+    def replace_in_editor(self):
+        path, editor = self.current_editor()
+        if editor is None:
+            self.statusBar().showMessage("Open a file before using Replace.", 4000)
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Find and Replace")
+        dialog.resize(480, 165)
+        form = QFormLayout(dialog)
+        selected = editor.textCursor().selectedText()
+        find_box = QLineEdit(selected)
+        find_box.setObjectName("explorerFilter")
+        replace_box = QLineEdit()
+        replace_box.setObjectName("explorerFilter")
+        form.addRow("Find", find_box)
+        form.addRow("Replace with", replace_box)
+        row = QHBoxLayout()
+        replace_next = QPushButton("Replace Next")
+        replace_all = QPushButton("Replace All")
+        close_button = QPushButton("Close")
+        row.addWidget(replace_next)
+        row.addWidget(replace_all)
+        row.addStretch(1)
+        row.addWidget(close_button)
+        form.addRow(row)
+
+        def do_replace_next():
+            needle = find_box.text()
+            if not needle:
+                return
+            if not editor.find(needle):
+                cursor = editor.textCursor()
+                cursor.movePosition(QTextCursor.MoveOperation.Start)
+                editor.setTextCursor(cursor)
+                if not editor.find(needle):
+                    self.statusBar().showMessage("No further matches.", 3000)
+                    return
+            editor.insertPlainText(replace_box.text())
+            self.statusBar().showMessage("Replaced one occurrence in " + Path(path).name, 3000)
+
+        def do_replace_all():
+            needle = find_box.text()
+            if not needle:
+                return
+            document = editor.document()
+            transaction = QTextCursor(document)
+            transaction.beginEditBlock()
+            start_position = 0
+            count = 0
+            while True:
+                match = document.find(needle, start_position)
+                if match.isNull():
+                    break
+                match.insertText(replace_box.text())
+                start_position = match.position()
+                count += 1
+            transaction.endEditBlock()
+            if count:
+                self.statusBar().showMessage(f"Replaced {count} occurrence(s) in {Path(path).name}.", 5000)
+            else:
+                self.statusBar().showMessage("No matches found.", 3000)
+
+        replace_next.clicked.connect(do_replace_next)
+        replace_all.clicked.connect(do_replace_all)
+        close_button.clicked.connect(dialog.accept)
+        find_box.setFocus()
+        dialog.exec()
+
+    def search_workspace(self):
+        """Search text files in the workspace, excluding dependencies and secrets."""
+        if not self.workspace:
+            self.choose_workspace()
+            if not self.workspace:
+                return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Search in Workspace")
+        dialog.resize(840, 560)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(14, 14, 14, 12)
+        query_row = QHBoxLayout()
+        query = QLineEdit()
+        query.setObjectName("explorerFilter")
+        query.setPlaceholderText("Search text across workspace files…")
+        search_button = QPushButton("Search")
+        search_button.setObjectName("panelPrimary")
+        query_row.addWidget(query, 1)
+        query_row.addWidget(search_button)
+        layout.addLayout(query_row)
+        results = QListWidget()
+        results.setObjectName("quickOpenList")
+        layout.addWidget(results, 1)
+        status = QLabel("Searches readable text files, skipping generated folders and credentials.")
+        status.setObjectName("muted")
+        layout.addWidget(status)
+        selected: dict[str, Any] = {}
+
+        def perform_search():
+            needle = query.text()
+            results.clear()
+            if not needle:
+                status.setText("Enter text to search.")
+                return
+            files = self._workspace_files(limit=1800)
+            total_bytes = 0
+            hit_count = 0
+            for file_path in files:
+                try:
+                    file_size = file_path.stat().st_size
+                    total_bytes += file_size
+                    if total_bytes > 25 * 1024 * 1024:
+                        break
+                    body = read_text_file(file_path)
+                except (OSError, WorkspaceError):
+                    continue
+                for line_number, line in enumerate(body.splitlines(), 1):
+                    column = line.casefold().find(needle.casefold())
+                    if column < 0:
+                        continue
+                    relative = str(file_path.relative_to(self.workspace)).replace("\\", "/")
+                    excerpt = line.strip()
+                    if len(excerpt) > 160:
+                        excerpt = excerpt[:157] + "…"
+                    item = QListWidgetItem(f"{relative}:{line_number}  ·  {excerpt}")
+                    item.setData(Qt.ItemDataRole.UserRole, {
+                        "path": str(file_path), "line": line_number,
+                        "column": column, "needle": needle,
+                    })
+                    results.addItem(item)
+                    hit_count += 1
+                    if hit_count >= 200:
+                        break
+                if hit_count >= 200:
+                    break
+            status.setText(
+                f"Found {hit_count} match(es) in a bounded scan of up to {len(files)} files and 25 MiB."
+                if hit_count else "No matches found in the scanned text files."
+            )
+
+        def open_result(item=None):
+            result = item or results.currentItem()
+            if result is None:
+                return
+            selected.update(result.data(Qt.ItemDataRole.UserRole))
+            dialog.accept()
+
+        search_button.clicked.connect(perform_search)
+        query.returnPressed.connect(perform_search)
+        results.itemActivated.connect(open_result)
+        query.setFocus()
+        if dialog.exec() == QDialog.DialogCode.Accepted and selected.get("path"):
+            self.open_file(Path(selected["path"]))
+            _path, editor = self.current_editor()
+            if editor is not None:
+                block = editor.document().findBlockByNumber(max(0, int(selected["line"]) - 1))
+                cursor = QTextCursor(block)
+                cursor.setPosition(block.position() + int(selected["column"]))
+                cursor.movePosition(
+                    QTextCursor.MoveOperation.Right,
+                    QTextCursor.MoveMode.KeepAnchor,
+                    len(str(selected["needle"]))
+                )
+                editor.setTextCursor(cursor)
+                editor.setFocus()
+
     def show_preferences(self):
         QMessageBox.information(
             self, "CONTINUUM Preferences",
