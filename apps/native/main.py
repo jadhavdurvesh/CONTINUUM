@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, QSettings, QTimer, QSize, QRect, QRegularExpression
+from PySide6.QtCore import Qt, QSettings, QTimer, QSize, QRect, QRegularExpression, QProcess
 from PySide6.QtGui import (
     QAction, QActionGroup, QColor, QFont, QKeySequence, QPainter, QPalette,
     QSyntaxHighlighter, QTextCharFormat, QTextCursor
@@ -288,6 +288,11 @@ class ContinuumWindow(QMainWindow):
         self.toggle_cloud_action.setShortcut(QKeySequence("Ctrl+Alt+B"))
         self.toggle_cloud_action.triggered.connect(self.toggle_cloud_panel)
         view_menu.addAction(self.toggle_cloud_action)
+        self.terminal_action = QAction("Toggle Integrated Terminal", self)
+        self.terminal_action.setShortcut(QKeySequence("Ctrl+`"))
+        self.terminal_action.triggered.connect(self.toggle_terminal)
+        view_menu.addAction(self.terminal_action)
+        self.view_menu = view_menu
         view_menu.addSeparator()
         self.toggle_theme_action = QAction("Use Light Theme", self)
         self.toggle_theme_action.setCheckable(True)
@@ -296,6 +301,30 @@ class ContinuumWindow(QMainWindow):
             lambda checked: self.apply_theme("light" if checked else "dark")
         )
         view_menu.addAction(self.toggle_theme_action)
+
+        self.quick_open_action = QAction("Quick Open File…", self)
+        self.quick_open_action.setShortcut(QKeySequence("Ctrl+P"))
+        self.quick_open_action.triggered.connect(self.quick_open)
+        self.addAction(self.quick_open_action)
+        view_menu.addAction(self.quick_open_action)
+        self.command_palette_action = QAction("Command Palette…", self)
+        self.command_palette_action.setShortcut(QKeySequence("Ctrl+Shift+P"))
+        self.command_palette_action.triggered.connect(self.show_command_palette)
+        self.addAction(self.command_palette_action)
+        view_menu.addAction(self.command_palette_action)
+        self.find_action = QAction("Find in Editor…", self)
+        self.find_action.setShortcut(QKeySequence("Ctrl+F"))
+        self.find_action.triggered.connect(self.find_in_editor)
+        self.addAction(self.find_action)
+        self.replace_action = QAction("Replace in Editor…", self)
+        self.replace_action.setShortcut(QKeySequence("Ctrl+H"))
+        self.replace_action.triggered.connect(self.replace_in_editor)
+        self.addAction(self.replace_action)
+        self.search_workspace_action = QAction("Search in Workspace…", self)
+        self.search_workspace_action.setShortcut(QKeySequence("Ctrl+Shift+F"))
+        self.search_workspace_action.triggered.connect(self.search_workspace)
+        self.addAction(self.search_workspace_action)
+        view_menu.addAction(self.search_workspace_action)
 
         help_menu = self.menuBar().addMenu("&Help")
         about_action = QAction("About CONTINUUM", self)
@@ -372,7 +401,7 @@ class ContinuumWindow(QMainWindow):
         top.addWidget(self.cloud_badge)
         self.cloud_button = QPushButton("Connect Cloud")
         self.cloud_button.setObjectName("headerPrimary")
-        self.cloud_button.clicked.connect(self.connect_cloud)
+        self.cloud_button.clicked.connect(self.header_cloud_action)
         top.addWidget(self.cloud_button)
         root.addWidget(topbar)
 
@@ -432,6 +461,17 @@ class ContinuumWindow(QMainWindow):
         self.explorer_refresh_button.clicked.connect(self.refresh_tree)
         eh.addWidget(self.explorer_refresh_button)
         explorer_layout.addWidget(explorer_header)
+
+        self.explorer_filter = QLineEdit()
+        self.explorer_filter.setObjectName("explorerFilter")
+        self.explorer_filter.setPlaceholderText("Filter files by name…")
+        self.explorer_filter.setClearButtonEnabled(True)
+        self.explorer_filter.textChanged.connect(self.filter_explorer_tree)
+        explorer_filter_wrap = QWidget()
+        explorer_filter_layout = QHBoxLayout(explorer_filter_wrap)
+        explorer_filter_layout.setContentsMargins(10, 8, 10, 8)
+        explorer_filter_layout.addWidget(self.explorer_filter)
+        explorer_layout.addWidget(explorer_filter_wrap)
 
         self.explorer_stack = QStackedWidget()
         self.workspace_tree = QTreeWidget()
@@ -730,9 +770,73 @@ class ContinuumWindow(QMainWindow):
         self.setStatusBar(status)
         self.statusBar().showMessage("Local-first workspace • Files stay on this PC unless you explicitly send context to a cloud agent.")
 
-        # Make first-run proportions readable at typical laptop resolutions.
+        # Integrated local terminal. It runs only when the user submits a command.
+        self.terminal_history: list[str] = []
+        self.terminal_history_index = 0
+        self.terminal_dock = QDockWidget("Terminal", self)
+        self.terminal_dock.setObjectName("terminalDock")
+        self.terminal_dock.setAllowedAreas(Qt.DockWidgetArea.BottomDockWidgetArea)
+        self.terminal_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable |
+            QDockWidget.DockWidgetFeature.DockWidgetFloatable |
+            QDockWidget.DockWidgetFeature.DockWidgetClosable
+        )
+        terminal_host = QWidget()
+        terminal_layout = QVBoxLayout(terminal_host)
+        terminal_layout.setContentsMargins(8, 8, 8, 8)
+        terminal_layout.setSpacing(7)
+        self.terminal_output = QPlainTextEdit()
+        self.terminal_output.setObjectName("terminalOutput")
+        self.terminal_output.setReadOnly(True)
+        self.terminal_output.setFont(QFont("Cascadia Code" if sys.platform == "win32" else "DejaVu Sans Mono", 9))
+        self.terminal_output.setPlaceholderText("Local command output will appear here. Commands run only when you press Enter.")
+        terminal_layout.addWidget(self.terminal_output, 1)
+        terminal_input_row = QHBoxLayout()
+        self.terminal_prompt = QLabel("PS" if os.name == "nt" else "$")
+        self.terminal_prompt.setObjectName("terminalPrompt")
+        terminal_input_row.addWidget(self.terminal_prompt)
+        self.terminal_input = QLineEdit()
+        self.terminal_input.setObjectName("terminalInput")
+        self.terminal_input.setPlaceholderText("Enter a local command…")
+        self.terminal_input.returnPressed.connect(self.run_terminal_command)
+        terminal_input_row.addWidget(self.terminal_input, 1)
+        self.terminal_run_button = QPushButton("Run")
+        self.terminal_run_button.setObjectName("panelPrimary")
+        self.terminal_run_button.clicked.connect(self.run_terminal_command)
+        terminal_input_row.addWidget(self.terminal_run_button)
+        self.terminal_stop_button = QPushButton("Stop")
+        self.terminal_stop_button.setObjectName("panelButton")
+        self.terminal_stop_button.clicked.connect(self.stop_terminal_command)
+        self.terminal_stop_button.setEnabled(False)
+        terminal_input_row.addWidget(self.terminal_stop_button)
+        terminal_clear_button = QPushButton("Clear")
+        terminal_clear_button.setObjectName("panelButton")
+        terminal_clear_button.clicked.connect(self.terminal_output.clear)
+        terminal_input_row.addWidget(terminal_clear_button)
+        terminal_layout.addLayout(terminal_input_row)
+        self.terminal_process = QProcess(self)
+        self.terminal_process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        self.terminal_process.readyReadStandardOutput.connect(self.read_terminal_output)
+        self.terminal_process.finished.connect(self.terminal_command_finished)
+        self.terminal_process.errorOccurred.connect(self.terminal_process_error)
+        self.terminal_dock.setWidget(terminal_host)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.terminal_dock)
+        self.terminal_dock.hide()
+        self.view_menu.addAction(self.terminal_dock.toggleViewAction())
+        self.terminal_dock.toggleViewAction().setShortcut(QKeySequence("Ctrl+`"))
+
+        # Main window starts with both useful side panels explicitly available.
         self._explorer_visible = True
         self._cloud_visible = True
+        self.cloud_panel.setMinimumWidth(318)
+        self.cloud_panel.setMaximumWidth(390)
+        self.cloud_panel.setVisible(True)
+        self.explorer_panel.setMinimumWidth(235)
+        self.explorer_panel.setMaximumWidth(310)
+        self.explorer_rail_button.setChecked(True)
+        self.cloud_rail_button.setChecked(True)
+        self.toggle_explorer_action.setChecked(True)
+        self.toggle_cloud_action.setChecked(True)
         self.apply_theme(self.theme)
         self.update_cloud_controls()
 
@@ -761,11 +865,99 @@ class ContinuumWindow(QMainWindow):
         self.explorer_rail_button.setChecked(visible)
 
     def toggle_cloud_panel(self, checked=None):
-        visible = not self.cloud_panel.isVisible() if checked is None else bool(checked)
-        self.cloud_panel.setVisible(visible)
+        visible = (not self._cloud_visible) if checked is None else bool(checked)
         self._cloud_visible = visible
+        self.cloud_panel.setVisible(visible)
         self.toggle_cloud_action.setChecked(visible)
         self.cloud_rail_button.setChecked(visible)
+        self.centralWidget().updateGeometry()
+
+    def header_cloud_action(self):
+        if self.cloud.signed_in:
+            self.toggle_cloud_panel(not self._cloud_visible)
+        else:
+            self.toggle_cloud_panel(True)
+            self.email.setFocus()
+            self.statusBar().showMessage("Sign in from the Cloud & Agents panel.", 5000)
+
+    def toggle_terminal(self, *_args):
+        if not hasattr(self, "terminal_dock"):
+            return
+        if self.terminal_dock.isVisible():
+            self.terminal_dock.hide()
+        else:
+            self.terminal_dock.show()
+            self.terminal_input.setFocus()
+
+    def append_terminal_text(self, text: str):
+        if text:
+            self.terminal_output.moveCursor(QTextCursor.MoveOperation.End)
+            self.terminal_output.insertPlainText(text)
+            self.terminal_output.moveCursor(QTextCursor.MoveOperation.End)
+
+    def read_terminal_output(self):
+        data = bytes(self.terminal_process.readAllStandardOutput())
+        if data:
+            self.append_terminal_text(data.decode("utf-8", errors="replace"))
+
+    def run_terminal_command(self):
+        command = self.terminal_input.text().strip()
+        if not command:
+            return
+        if self.terminal_process.state() != QProcess.ProcessState.NotRunning:
+            self.statusBar().showMessage("A terminal command is already running. Stop it before starting another.", 5000)
+            return
+        self.terminal_input.clear()
+        self.terminal_history.append(command)
+        self.terminal_history_index = len(self.terminal_history)
+        cwd = str(self.workspace or Path.home())
+        self.append_terminal_text(f"\n{cwd}> {command}\n" if os.name == "nt" else f"\n{cwd}$ {command}\n")
+        self.terminal_process.setWorkingDirectory(cwd)
+        if os.name == "nt":
+            self.terminal_process.setProgram(os.environ.get("COMSPEC", "cmd.exe"))
+            self.terminal_process.setArguments(["/D", "/S", "/C", command])
+        else:
+            self.terminal_process.setProgram("/bin/bash")
+            self.terminal_process.setArguments(["-lc", command])
+        self.terminal_run_button.setEnabled(False)
+        self.terminal_stop_button.setEnabled(True)
+        self.terminal_process.start()
+
+    def stop_terminal_command(self):
+        if self.terminal_process.state() != QProcess.ProcessState.NotRunning:
+            self.terminal_process.kill()
+            self.append_terminal_text("\n[Command stopped by user]\n")
+
+    def terminal_command_finished(self, exit_code: int, _exit_status):
+        self.read_terminal_output()
+        self.terminal_run_button.setEnabled(True)
+        self.terminal_stop_button.setEnabled(False)
+        self.append_terminal_text(f"\n[Process exited with code {exit_code}]\n")
+        self.terminal_input.setFocus()
+
+    def terminal_process_error(self, error):
+        if error == QProcess.ProcessError.FailedToStart:
+            self.terminal_run_button.setEnabled(True)
+            self.terminal_stop_button.setEnabled(False)
+            self.append_terminal_text("\n[Could not start the command shell]\n")
+
+    def filter_explorer_tree(self, value: str):
+        needle = value.casefold().strip()
+
+        def visit(parent):
+            any_visible = False
+            for i in range(parent.childCount()):
+                item = parent.child(i)
+                own_match = not needle or needle in item.text(0).casefold()
+                child_match = visit(item) if item.childCount() else False
+                visible = own_match or child_match
+                item.setHidden(not visible)
+                any_visible = any_visible or visible
+                if needle and child_match:
+                    item.setExpanded(True)
+            return any_visible
+
+        visit(self.workspace_tree.invisibleRootItem())
 
     def show_preferences(self):
         QMessageBox.information(
