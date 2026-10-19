@@ -10,19 +10,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, QSettings, QTimer, QSize, QRect, QRegularExpression, QProcess
-from PySide6.QtGui import (
-    QAction, QActionGroup, QColor, QFont, QKeySequence, QPainter, QPalette,
-    QSyntaxHighlighter, QTextCharFormat, QTextCursor
-)
+from PySide6.QtCore import Qt, QSettings, QTimer, QSize, QProcess, Signal
+from PySide6.QtGui import QAction, QFont, QFontDatabase, QKeySequence, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QComboBox, QDialog, QDialogButtonBox, QDockWidget,
     QFileDialog, QFormLayout, QFrame, QGridLayout, QHBoxLayout, QLabel,
     QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
     QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QStackedWidget,
-    QStatusBar, QStyle, QTabWidget, QToolBar, QToolButton, QTreeWidget,
-    QTreeWidgetItem, QVBoxLayout, QWidget, QInputDialog, QTextEdit
+    QStatusBar, QTabWidget, QToolBar, QToolButton, QTreeWidget,
+    QTreeWidgetItem, QVBoxLayout, QWidget, QInputDialog
 )
+
+from pyside6_scintilla import Scintilla, ScintillaEdit
+from lexilla import Language, create_lexer
+from lexilla.pyside6_scintilla import set_lexer
 
 from continuum.cloud import CloudClient, CloudError
 from continuum.workspace import (
@@ -45,201 +46,353 @@ def user_data_dir() -> Path:
     return path
 
 
-class LineNumberArea(QWidget):
-    """Gutter widget that paints line numbers for the source editor."""
+class _ScintillaDocumentState:
+    """Compatibility facade for the app's savepoint/dirty-state handling."""
 
     def __init__(self, editor: "CodeEditor"):
-        super().__init__(editor)
-        self.editor = editor
-        self.setObjectName("lineNumberArea")
+        self._editor = editor
 
-    def sizeHint(self):
-        return QSize(self.editor.line_number_area_width(), 0)
+    def isModified(self) -> bool:
+        return self._editor._dirty
 
-    def paintEvent(self, event):
-        self.editor.paint_line_numbers(event)
-
-
-class CodeSyntaxHighlighter(QSyntaxHighlighter):
-    """Small, fast syntax highlighter for common programming-language tokens."""
-
-    KEYWORDS = (
-        "and as assert async await break case class const continue def del elif else "
-        "except export extends finally for from fun function global if import in is "
-        "lambda let match nonlocal not or pass raise return static struct try type "
-        "using var void while with yield public private protected interface enum "
-        "implements package switch throw new this super self"
-    )
-
-    def __init__(self, document, theme="dark"):
-        super().__init__(document)
-        self.theme = theme
-        self.rules = []
-        self.set_theme(theme)
-
-    def set_theme(self, theme):
-        self.theme = theme
-        palette = {
-            "dark": {
-                "keyword": "#c586c0", "string": "#ce9178", "comment": "#6a9955",
-                "number": "#b5cea8", "function": "#dcdcaa", "type": "#4ec9b0",
-                "constant": "#569cd6",
-            },
-            "light": {
-                "keyword": "#7c3aed", "string": "#a31515", "comment": "#008000",
-                "number": "#098658", "function": "#795e26", "type": "#267f99",
-                "constant": "#0000ff",
-            },
-        }["dark" if theme == "dark" else "light"]
-
-        def fmt(color, bold=False, italic=False):
-            value = QTextCharFormat()
-            value.setForeground(QColor(color))
-            if bold:
-                value.setFontWeight(QFont.Weight.Bold)
-            if italic:
-                value.setFontItalic(True)
-            return value
-
-        keyword_pattern = r"\b(?:" + "|".join(self.KEYWORDS.split()) + r")\b"
-        self.rules = [
-            (QRegularExpression(keyword_pattern), fmt(palette["keyword"], True)),
-            (QRegularExpression(r"\b(?:true|false|null|None|True|False|undefined|self)\b"), fmt(palette["constant"])),
-            (QRegularExpression(r"\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b"), fmt(palette["number"])),
-            (QRegularExpression(r"\b[A-Za-z_]\w*(?=\s*\()"), fmt(palette["function"])),
-            (QRegularExpression(r"\b[A-Z][A-Za-z0-9_]*\b"), fmt(palette["type"])),
-            (QRegularExpression(r"""(['"]).*?\1"""), fmt(palette["string"])),
-            (QRegularExpression(r"#[^\n]*|//[^\n]*|/\*.*?\*/"), fmt(palette["comment"], italic=True)),
-        ]
-        self.rehighlight()
-
-    def highlightBlock(self, text):
-        for expression, text_format in self.rules:
-            iterator = expression.globalMatch(text)
-            while iterator.hasNext():
-                match = iterator.next()
-                self.setFormat(match.capturedStart(), match.capturedLength(), text_format)
-
-
-class CodeEditor(QPlainTextEdit):
-    """IDE-oriented editor with a line-number gutter and token highlighting."""
-
-    def __init__(self, theme="dark", parent=None):
-        super().__init__(parent)
-        self.theme = theme
-        self.line_number_area = LineNumberArea(self)
-        self.highlighter = CodeSyntaxHighlighter(self.document(), theme)
-        self.setObjectName("codeEditor")
-        self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        self.setFont(QFont("Cascadia Code" if sys.platform == "win32" else "DejaVu Sans Mono", 10))
-        self.setTabStopDistance(self.fontMetrics().horizontalAdvance(" ") * 4)
-        self.blockCountChanged.connect(self.update_line_number_area_width)
-        self.updateRequest.connect(self.update_line_number_area)
-        self.update_line_number_area_width(0)
-
-    def line_number_area_width(self):
-        digits = max(2, len(str(max(1, self.blockCount()))))
-        return 13 + self.fontMetrics().horizontalAdvance("9") * digits
-
-    def update_line_number_area_width(self, _count):
-        self.setViewportMargins(self.line_number_area_width(), 0, 0, 0)
-
-    def update_line_number_area(self, rect, dy):
-        if dy:
-            self.line_number_area.scroll(0, dy)
+    def setModified(self, modified: bool) -> None:
+        if modified:
+            self._editor._dirty = True
+            if not self._editor._loading:
+                self._editor.textChanged.emit()
         else:
-            self.line_number_area.update(0, rect.y(), self.line_number_area.width(), rect.height())
-        if rect.contains(self.viewport().rect()):
-            self.update_line_number_area_width(0)
+            self._editor.setSavePoint()
+            self._editor._dirty = False
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        contents = self.contentsRect()
-        self.line_number_area.setGeometry(QRect(
-            contents.left(), contents.top(), self.line_number_area_width(), contents.height()
-        ))
 
-    def paint_line_numbers(self, event):
-        painter = QPainter(self.line_number_area)
-        dark = self.theme == "dark"
-        painter.fillRect(event.rect(), QColor("#1e1e1e" if dark else "#f4f4f4"))
-        painter.setPen(QColor("#858585" if dark else "#777777"))
-        block = self.firstVisibleBlock()
-        block_number = block.blockNumber()
-        top = int(self.blockBoundingGeometry(block).translated(self.contentOffset()).top())
-        height = int(self.blockBoundingRect(block).height())
-        bottom = top + height
-        while block.isValid() and top <= event.rect().bottom():
-            if block.isVisible() and bottom >= event.rect().top():
-                number_color = "#d4d4d4" if block_number == self.textCursor().blockNumber() and dark else (
-                    "#333333" if block_number == self.textCursor().blockNumber() else "#858585" if dark else "#777777"
-                )
-                painter.setPen(QColor(number_color))
-                painter.drawText(
-                    0, top, self.line_number_area.width() - 7, self.fontMetrics().height(),
-                    Qt.AlignmentFlag.AlignRight, str(block_number + 1)
-                )
-            block = block.next()
-            block_number += 1
-            top = bottom
-            height = int(self.blockBoundingRect(block).height()) if block.isValid() else 0
-            bottom = top + height
+class CodeEditor(ScintillaEdit):
+    """Native Scintilla editor with Lexilla syntax lexers and IDE interactions."""
 
-    def set_theme(self, theme):
-        # Highlighting changes formatting, not source content. Preserve the editor's
-        # dirty state and suppress plain-text signals during the recolor pass.
-        was_modified = self.document().isModified()
-        was_blocked = self.blockSignals(True)
+    textChanged = Signal()
+    cursorPositionChanged = Signal()
+
+    _LANGUAGE_BY_EXTENSION = {
+        ".py": Language.PYTHON, ".pyw": Language.PYTHON,
+        ".c": Language.CPP, ".h": Language.CPP, ".cc": Language.CPP,
+        ".cpp": Language.CPP, ".cxx": Language.CPP, ".hpp": Language.CPP,
+        ".java": Language.CPP, ".kt": Language.CPP, ".go": Language.CPP,
+        ".js": Language.CPP, ".jsx": Language.CPP, ".ts": Language.CPP, ".tsx": Language.CPP,
+        ".html": Language.HYPERTEXT, ".htm": Language.HYPERTEXT, ".xml": Language.XML,
+        ".css": Language.CSS, ".scss": Language.CSS,
+        ".json": Language.JSON, ".md": Language.MARKDOWN, ".markdown": Language.MARKDOWN,
+        ".sql": Language.SQL, ".yaml": Language.YAML, ".yml": Language.YAML,
+        ".toml": Language.TOML, ".sh": Language.BASH, ".bash": Language.BASH,
+        ".ps1": Language.POWERSHELL, ".bat": Language.BATCH, ".cmd": Language.BATCH,
+        ".rs": Language.RUST, ".dart": Language.DART, ".lua": Language.LUA,
+        ".rb": Language.RUBY, ".pl": Language.PERL, ".php": Language.PHPSCRIPT,
+        ".r": Language.RUST, ".make": Language.MAKEFILE, ".mk": Language.MAKEFILE,
+        ".ini": Language.CONF, ".cfg": Language.CONF, ".conf": Language.CONF,
+        ".v": Language.VERILOG, ".vhd": Language.VHDL, ".vhdl": Language.VHDL,
+        ".zig": Language.ZIG, ".gd": Language.GDSCRIPT, ".tex": Language.LATEX,
+    }
+
+    _KEYWORDS = {
+        Language.PYTHON: (
+            "and as assert async await break class continue def del elif else except "
+            "False finally for from global if import in is lambda nonlocal not or pass "
+            "raise return True try while with yield None self cls"
+        ),
+        Language.CPP: (
+            "alignas alignof auto bool break case catch char class const constexpr "
+            "continue default delete do double else enum explicit export extern false "
+            "float for friend goto if inline int long mutable namespace new noexcept "
+            "nullptr operator private protected public return short signed sizeof static "
+            "struct switch template this throw true try typedef typename union unsigned "
+            "using virtual void volatile while"
+        ),
+        Language.JSON: "true false null",
+        Language.SQL: (
+            "select from where insert into values update set delete create alter drop table "
+            "database index join left right inner outer on as and or not null primary key "
+            "foreign references distinct order by group having limit offset union all"
+        ),
+        Language.BASH: "if then else elif fi for while do done case esac function local export return",
+        Language.POWERSHELL: "param function begin process end if else elseif foreach in while return class",
+        Language.RUST: "as async await break const continue crate else enum extern false fn for if impl in let loop match mod move mut pub ref return self static struct super trait true type unsafe use where while",
+        Language.CSS: "important inherit initial unset none block flex grid absolute relative fixed",
+    }
+
+    _FOLD_MARKERS = {
+        Scintilla.MarkerOutline.FolderOpen: Scintilla.MarkerSymbol.BoxMinus,
+        Scintilla.MarkerOutline.Folder: Scintilla.MarkerSymbol.BoxPlus,
+        Scintilla.MarkerOutline.FolderSub: Scintilla.MarkerSymbol.VLine,
+        Scintilla.MarkerOutline.FolderTail: Scintilla.MarkerSymbol.LCorner,
+        Scintilla.MarkerOutline.FolderEnd: Scintilla.MarkerSymbol.BoxPlusConnected,
+        Scintilla.MarkerOutline.FolderOpenMid: Scintilla.MarkerSymbol.BoxMinusConnected,
+        Scintilla.MarkerOutline.FolderMidTail: Scintilla.MarkerSymbol.TCorner,
+    }
+
+    def __init__(self, theme: str = "dark", suffix: str = "", parent=None):
+        super().__init__(parent)
+        self.theme = "light" if theme == "light" else "dark"
+        self._dirty = False
+        self._loading = True
+        self._document_state = _ScintillaDocumentState(self)
+        self.lexer_name = "Plain Text"
+        self._lexer_styles: list[tuple[int, str, str]] = []
+        self.setObjectName("codeEditor")
+
+        fixed_font = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
+        self._font_family = fixed_font.family()
+        self.setFont(fixed_font)
+        self.setTabWidth(4)
+        self.setIndent(4)
+        self.setUseTabs(False)
+        self.setTabIndents(True)
+        self.setBackSpaceUnIndents(True)
+        self.setIndentationGuides(Scintilla.IndentView.LookBoth)
+        self.setWrapMode(Scintilla.WrapMode.None_)
+        self.setMultipleSelection(True)
+        self.setAdditionalSelectionTyping(True)
+        self.setMouseSelectionRectangularSwitch(True)
+        self.setCaretLineVisible(True)
+        self.setModEventMask(
+            int(Scintilla.ModificationFlags.InsertText) |
+            int(Scintilla.ModificationFlags.DeleteText) |
+            int(Scintilla.ModificationFlags.ChangeStyle) |
+            int(Scintilla.ModificationFlags.ChangeFold)
+        )
+        self.savePointChanged.connect(self._save_point_changed)
+        self.modified.connect(self._document_modified)
+        self.updateUi.connect(self._update_ui)
+        self._setup_margins()
+        self.set_language_for_path(suffix)
+        self.setSavePoint()
+        self._dirty = False
+        self._loading = False
+
+    def document(self) -> _ScintillaDocumentState:
+        """Expose QPlainTextEdit-like modified state used by CONTINUUM's file workflow."""
+        return self._document_state
+
+    def setPlainText(self, text: str) -> None:
+        self._loading = True
         try:
-            self.theme = theme
-            self.highlighter.set_theme(theme)
-            self.document().setModified(was_modified)
+            self.setText(text)
+            self.setSavePoint()
+            self._dirty = False
         finally:
-            self.blockSignals(was_blocked)
-        self.line_number_area.update()
+            self._loading = False
+        self.cursorPositionChanged.emit()
 
-    def keyPressEvent(self, event):
-        """Provide editor basics: paired delimiters, indentation and smart Enter."""
-        text = event.text()
-        cursor = self.textCursor()
-        pairs = {"(": ")", "[": "]", "{": "}", '"': '"', "'": "'"}
+    def toPlainText(self) -> str:
+        return bytes(self.get_text_range(0, self.textLength())).decode("utf-8", errors="replace")
 
-        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            line = cursor.block().text()
-            indent = re.match(r"[ \\t]*", line).group(0)
-            trimmed = line.rstrip()
-            if trimmed.endswith((":", "{", "[", "(")):
-                indent += "    "
-            super().keyPressEvent(event)
-            self.insertPlainText(indent)
+    def selected_text(self) -> str:
+        start, end = self.selectionStart(), self.selectionEnd()
+        if start == end:
+            return ""
+        return bytes(self.get_text_range(start, end)).decode("utf-8", errors="replace")
+
+    def select_range(self, start: int, end: int) -> None:
+        self.setSel(start, end)
+        self.ensureCaretVisible()
+
+    def current_line_column(self) -> tuple[int, int]:
+        position = self.currentPos()
+        line = self.lineFromPosition(position)
+        line_start = self.positionFromLine(line)
+        prefix = bytes(self.get_text_range(line_start, position)).decode("utf-8", errors="replace")
+        return line + 1, len(prefix) + 1
+
+    def goto_line(self, zero_based_line: int) -> None:
+        self.gotoLine(max(0, zero_based_line))
+
+    def find(self, text: str) -> bool:
+        if not text:
+            return False
+        end = self.textLength()
+        start = min(max(0, self.currentPos()), end)
+        flags = int(Scintilla.FindOption.None_)
+        found_start, found_end = self.find_text(flags, text, start, end)
+        if found_start < 0 and start > 0:
+            found_start, found_end = self.find_text(flags, text, 0, start)
+        if found_start < 0:
+            return False
+        self.setSel(found_start, found_end)
+        self.setCurrentPos(found_end)
+        self.ensureCaretVisible()
+        return True
+
+    def replace_selected(self, replacement: str) -> None:
+        start, end = self.selectionStart(), self.selectionEnd()
+        self.setTargetRange(start, end)
+        data = replacement.encode("utf-8")
+        self.replaceTarget(len(data), data)
+        self.setSavePoint() if not self._dirty else None
+
+    def replace_all(self, needle: str, replacement: str) -> int:
+        if not needle:
+            return 0
+        self.beginUndoAction()
+        count = 0
+        try:
+            search_from = 0
+            end = self.textLength()
+            flags = int(Scintilla.FindOption.None_)
+            replacement_bytes = replacement.encode("utf-8")
+            while search_from <= end:
+                found_start, found_end = self.find_text(flags, needle, search_from, end)
+                if found_start < 0:
+                    break
+                self.setTargetRange(found_start, found_end)
+                self.replaceTarget(len(replacement_bytes), replacement_bytes)
+                count += 1
+                search_from = found_start + len(replacement_bytes)
+                end = self.textLength()
+        finally:
+            self.endUndoAction()
+        return count
+
+    @staticmethod
+    def _pack_hex(color: str) -> int:
+        raw = color.lstrip("#")
+        red, green, blue = int(raw[0:2], 16), int(raw[2:4], 16), int(raw[4:6], 16)
+        # Scintilla represents COLORREF values as 0xBBGGRR.
+        return red | (green << 8) | (blue << 16)
+
+    def _setup_margins(self) -> None:
+        line_numbers = int(Scintilla.MarginType.Number)
+        symbols = int(Scintilla.MarginType.Symbol)
+        self.setMarginTypeN(0, line_numbers)
+        self.setMarginWidthN(0, 44)
+        self.setMarginTypeN(1, symbols)
+        self.setMarginMaskN(1, int(Scintilla.MaskFolders))
+        self.setMarginWidthN(1, 16)
+        self.setMarginSensitiveN(1, True)
+        for marker_number, symbol in self._FOLD_MARKERS.items():
+            self.markerDefine(int(marker_number), int(symbol))
+        self.setAutomaticFold(
+            int(Scintilla.AutomaticFold.Show | Scintilla.AutomaticFold.Click | Scintilla.AutomaticFold.Change)
+        )
+
+    def set_language_for_path(self, path_or_suffix: str) -> None:
+        """Attach an installed Lexilla language lexer based on a file path/extension."""
+        suffix = Path(path_or_suffix).suffix.lower() if "." in Path(path_or_suffix).name else path_or_suffix.lower()
+        language = self._LANGUAGE_BY_EXTENSION.get(suffix)
+        self._lexer_styles = []
+        self.lexer_name = "Plain Text"
+        if language is not None:
+            try:
+                lexer = create_lexer(language)
+            except Exception:
+                lexer = None
+            if lexer is not None:
+                self._lexer_styles = [
+                    (
+                        style,
+                        str(lexer.name_of_style(style)).rstrip("\x00"),
+                        str(lexer.description_of_style(style)).rstrip("\x00"),
+                    )
+                    for style in range(lexer.named_styles())
+                ]
+                self.lexer_name = language.name.replace("_", " ").title()
+                try:
+                    lexer.property_set("fold", "1")
+                except Exception:
+                    pass
+                set_lexer(self, lexer)
+                keywords = self._KEYWORDS.get(language)
+                if keywords:
+                    self.setKeyWords(0, keywords)
+                self.colourise(0, -1)
+        self._apply_theme(self.theme)
+
+    def _apply_theme(self, theme: str) -> None:
+        self.theme = "light" if theme == "light" else "dark"
+        if self.theme == "dark":
+            foreground, background = "#d4d4d4", "#1e1e1e"
+            lineno_fore, lineno_back = "#858585", "#252526"
+            comment, string, number = "#6a9955", "#ce9178", "#b5cea8"
+            keyword, typ, function = "#c586c0", "#4ec9b0", "#dcdcaa"
+            operator, selection, caret_line = "#d4d4d4", "#264f78", "#282828"
+            fold_back = "#252526"
+        else:
+            foreground, background = "#24292f", "#ffffff"
+            lineno_fore, lineno_back = "#858585", "#f4f4f4"
+            comment, string, number = "#008000", "#a31515", "#098658"
+            keyword, typ, function = "#7c3aed", "#267f99", "#795e26"
+            operator, selection, caret_line = "#24292f", "#add6ff", "#f5f8fa"
+            fold_back = "#f4f4f4"
+
+        default = int(Scintilla.StylesCommon.Default)
+        line_style = int(Scintilla.StylesCommon.LineNumber)
+        self.styleSetFont(default, self._font_family)
+        self.styleSetSize(default, 10)
+        self.styleSetFore(default, self._pack_hex(foreground))
+        self.styleSetBack(default, self._pack_hex(background))
+        self.styleClearAll()
+        self.styleSetFont(line_style, self._font_family)
+        self.styleSetSize(line_style, 9)
+        self.styleSetFore(line_style, self._pack_hex(lineno_fore))
+        self.styleSetBack(line_style, self._pack_hex(lineno_back))
+
+        for style, name, description in self._lexer_styles:
+            label = (name + " " + description).lower()
+            color = foreground
+            bold = False
+            italic = False
+            if "comment" in label or "commentline" in label:
+                color, italic = comment, True
+            elif any(part in label for part in ("string", "character", "regex", "literal")):
+                color = string
+            elif "number" in label:
+                color = number
+            elif any(part in label for part in ("keyword", "word", "preprocessor", "directive")):
+                color, bold = keyword, True
+            elif any(part in label for part in ("operator", "symbol")):
+                color = operator
+            elif any(part in label for part in ("class", "type", "namespace", "tag", "interface")):
+                color, bold = typ, True
+            elif any(part in label for part in ("function", "method")):
+                color = function
+            self.styleSetFont(style, self._font_family)
+            self.styleSetSize(style, 10)
+            self.styleSetFore(style, self._pack_hex(color))
+            self.styleSetBack(style, self._pack_hex(background))
+            self.styleSetBold(style, bold)
+            self.styleSetItalic(style, italic)
+
+        self.setCaretFore(self._pack_hex(foreground))
+        self.setCaretLineVisible(True)
+        self.setCaretLineBack(self._pack_hex(caret_line))
+        self.setSelBack(True, self._pack_hex(selection))
+        self.setSelFore(True, self._pack_hex(foreground))
+        self.setFoldMarginColour(True, self._pack_hex(fold_back))
+        self.setFoldMarginHiColour(True, self._pack_hex(fold_back))
+        digits = max(2, len(str(max(1, self.lineCount()))))
+        self.setMarginWidthN(0, self.textWidth(line_style, "9" * digits) + 15)
+        self.setMarginBackN(0, self._pack_hex(lineno_back))
+        self.colourise(0, -1)
+
+    def set_theme(self, theme: str) -> None:
+        was_dirty = self._dirty
+        self._apply_theme(theme)
+        self._dirty = was_dirty
+
+    def _document_modified(self, modification_type, *_args) -> None:
+        if self._loading:
+            return
+        try:
+            flags = int(Scintilla.ModificationFlags.InsertText) | int(Scintilla.ModificationFlags.DeleteText)
+            if int(modification_type) & flags:
+                self._dirty = True
+                self.textChanged.emit()
+        except (TypeError, ValueError):
             return
 
-        if event.key() == Qt.Key.Key_Tab and not cursor.hasSelection():
-            self.insertPlainText("    ")
-            return
+    def _save_point_changed(self, modified: bool) -> None:
+        self._dirty = bool(modified)
+        if not self._loading:
+            self.textChanged.emit()
 
-        if text in pairs:
-            closing = pairs[text]
-            if cursor.hasSelection():
-                selected = cursor.selectedText()
-                cursor.insertText(text + selected + closing)
-                cursor.setPosition(cursor.position() - len(closing) - len(selected), QTextCursor.MoveMode.KeepAnchor)
-                self.setTextCursor(cursor)
-            else:
-                cursor.insertText(text + closing)
-                cursor.setPosition(cursor.position() - 1)
-                self.setTextCursor(cursor)
-            return
-
-        if text in pairs.values() and not cursor.hasSelection():
-            if cursor.positionInBlock() < len(cursor.block().text()):
-                block_text = cursor.block().text()
-                if block_text[cursor.positionInBlock()] == text:
-                    cursor.movePosition(QTextCursor.MoveOperation.Right)
-                    self.setTextCursor(cursor)
-                    return
-
-        super().keyPressEvent(event)
+    def _update_ui(self, *_args) -> None:
+        self.cursorPositionChanged.emit()
 
 
 class ContinueDialog(QDialog):
