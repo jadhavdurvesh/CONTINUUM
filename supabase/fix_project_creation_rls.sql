@@ -17,6 +17,8 @@ $$;
 
 create schema if not exists private;
 
+grant usage on schema private to authenticated;
+
 create or replace function private.is_project_member(target_project uuid)
 returns boolean
 language sql stable security definer set search_path = ''
