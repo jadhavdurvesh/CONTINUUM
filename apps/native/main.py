@@ -28,7 +28,7 @@ from continuum.workspace import (
     MAX_TEXT_BYTES, WorkspaceError, read_text_file, safe_file_path, should_ignore_path
 )
 
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.3.0"
 EDITOR_FONT = "Cascadia Code" if sys.platform == "win32" else "DejaVu Sans Mono"
 
 
