@@ -167,3 +167,131 @@
 .local-ide-lock-request small{font-size:8px;color:#9a9888}
 .local-ide-lock-request button{padding:5px 7px;border:1px solid #515143;border-radius:3px;background:#32332b;color:#cec7b7;font-size:8px}
 .local-ide-lock-request button.grant{border-color:#bd6d4e;background:#bd4b30;color:#fff6ed}
+
+/* Persistent dark appearance for the workspace dashboard */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  color: #e8e4da;
+  background: #171916;
+  --paper: #1c1f1b;
+  --white: #232621;
+  --ink: #e8e4da;
+  --muted: #a5a397;
+  --line: #393c34;
+  --accent: #e87555;
+  --accent-dark: #c95439;
+  --olive: #9eaf78;
+  --plum: #b39aba;
+  --soft: #292c26;
+}
+:root[data-theme="dark"] body { background: #171916; color: #e8e4da; }
+:root[data-theme="dark"] .app-shell,
+:root[data-theme="dark"] .main-area,
+:root[data-theme="dark"] .page-body { background: #1b1e1a; color: #e8e4da; }
+:root[data-theme="dark"] .sidebar { background: #20231f; border-color: #383b34; }
+:root[data-theme="dark"] .brand-wordmark span,
+:root[data-theme="dark"] .nav-section-label,
+:root[data-theme="dark"] .section-kicker,
+:root[data-theme="dark"] .eyebrow { color: #aaa597; }
+:root[data-theme="dark"] .project-switcher,
+:root[data-theme="dark"] .cloud-mini { background: #282b25; border-color: #41443b; color: #e8e4da; }
+:root[data-theme="dark"] .project-monogram { background: #393d34; color: #f0b49e; }
+:root[data-theme="dark"] .switcher-copy span,
+:root[data-theme="dark"] .cloud-mini p,
+:root[data-theme="dark"] .profile-copy span { color: #aaa597; }
+:root[data-theme="dark"] .nav-link { color: #c0bbae; }
+:root[data-theme="dark"] .nav-link:hover { background: #30332c; color: #f4efe4; }
+:root[data-theme="dark"] .nav-link.selected { background: #34352e; color: #f28b6d; box-shadow: inset 2px 0 #e87555, 0 1px 2px #0003; }
+:root[data-theme="dark"] .profile-row { border-color: #3a3d35; }
+:root[data-theme="dark"] .topbar { background: #20231f; border-color: #393c34; }
+:root[data-theme="dark"] .breadcrumbs { color: #a5a397; }
+:root[data-theme="dark"] .breadcrumbs strong { color: #e8e4da; }
+:root[data-theme="dark"] .top-icon { background: #292c26; color: #d0cabc; border-color: #42453c; }
+:root[data-theme="dark"] .top-icon kbd { background: #1d201c; border-color: #41443b; color: #b6b1a5; }
+:root[data-theme="dark"] h1,
+:root[data-theme="dark"] h2,
+:root[data-theme="dark"] h3,
+:root[data-theme="dark"] .metric-value,
+:root[data-theme="dark"] .task-title-line strong,
+:root[data-theme="dark"] .activity-copy strong,
+:root[data-theme="dark"] .empty-inline strong,
+:root[data-theme="dark"] .settings-list strong { color: #eee9df; }
+:root[data-theme="dark"] .page-intro p,
+:root[data-theme="dark"] .panel-heading p,
+:root[data-theme="dark"] .metric-head,
+:root[data-theme="dark"] .metric-note,
+:root[data-theme="dark"] .empty-inline p,
+:root[data-theme="dark"] .settings-list span,
+:root[data-theme="dark"] .activity-copy small { color: #aaa597; }
+:root[data-theme="dark"] .panel,
+:root[data-theme="dark"] .metric-card { background: #242722; border-color: #3a3d35; }
+:root[data-theme="dark"] .overview-ribbon { background: #2c2d25; border-color: #494439; }
+:root[data-theme="dark"] .ribbon-copy span,
+:root[data-theme="dark"] .ribbon-meta { color: #b4ad9e; }
+:root[data-theme="dark"] .metric-icon.terracotta { background: #4a3029; color: #f28b6d; }
+:root[data-theme="dark"] .metric-icon.olive { background: #333b2a; color: #b8ca91; }
+:root[data-theme="dark"] .metric-icon.stone { background: #33352f; color: #c0bbae; }
+:root[data-theme="dark"] .metric-icon.plum { background: #3b3040; color: #d3b8d8; }
+:root[data-theme="dark"] .metric-progress { background: #393b34; }
+:root[data-theme="dark"] .task-row,
+:root[data-theme="dark"] .activity-row,
+:root[data-theme="dark"] .protected-row,
+:root[data-theme="dark"] .settings-list > div { border-color: #383b34; }
+:root[data-theme="dark"] .status-select { background: #30332c; color: #d5d0c4; }
+:root[data-theme="dark"] .status-select-in_progress { background: #443426; color: #f0b67f; }
+:root[data-theme="dark"] .status-select-in_review { background: #3c3241; color: #d6b8db; }
+:root[data-theme="dark"] .status-select-done { background: #333d2a; color: #c0d49b; }
+:root[data-theme="dark"] .status-select-blocked { background: #492d27; color: #f1a28a; }
+:root[data-theme="dark"] .activity-avatar { background: #33352f; color: #c8c2b5; }
+:root[data-theme="dark"] .activity-avatar.actor-agent { background: #3a3040; color: #d0b4d8; }
+:root[data-theme="dark"] .activity-avatar.actor-system { background: #333d2a; color: #c0d49b; }
+:root[data-theme="dark"] .empty-inline-icon { background: #33352f; color: #c2bcaf; }
+:root[data-theme="dark"] .quality-ring { background: #333d2a; color: #c0d49b; }
+:root[data-theme="dark"] .quality-orbit { border-color: #4a5140; }
+:root[data-theme="dark"] .worker-callout,
+:root[data-theme="dark"] .governance-note,
+:root[data-theme="dark"] .modal-footnote { background: #2b2e27; border-color: #41443b; color: #c0bbae; }
+:root[data-theme="dark"] .worker-icon { background: #393b32; color: #d4c9b0; }
+:root[data-theme="dark"] .protected-icon { background: #492f28; color: #f28b6d; }
+:root[data-theme="dark"] .search-field,
+:root[data-theme="dark"] .task-toolbar select,
+:root[data-theme="dark"] .modal-form input,
+:root[data-theme="dark"] .modal-form textarea,
+:root[data-theme="dark"] .modal-form select,
+:root[data-theme="dark"] .auth-card input,
+:root[data-theme="dark"] .invite-form input,
+:root[data-theme="dark"] .cloud-config-form input { background: #1c1f1b; border-color: #45483f; color: #eee9df; }
+:root[data-theme="dark"] .search-field input { background: transparent; border: 0; color: #eee9df; }
+:root[data-theme="dark"] input::placeholder,
+:root[data-theme="dark"] textarea::placeholder { color: #89877d; }
+:root[data-theme="dark"] .button.secondary { background: #2d302a; color: #e2ddd2; border-color: #484b42; }
+:root[data-theme="dark"] .button.secondary:hover { background: #383b33; }
+:root[data-theme="dark"] .button.primary { color: #fff8ef; }
+:root[data-theme="dark"] .text-action { color: #f08a6b; }
+:root[data-theme="dark"] .command-list button { color: #ded8cb; }
+:root[data-theme="dark"] .command-list button:hover { background: #30332c; }
+:root[data-theme="dark"] .project-picker-menu { background: #252822; border-color: #44473e; box-shadow: 0 14px 35px #0007; }
+:root[data-theme="dark"] .project-picker-option,
+:root[data-theme="dark"] .project-picker-add { color: #e7e2d7; }
+:root[data-theme="dark"] .project-picker-option:hover,
+:root[data-theme="dark"] .project-picker-add:hover { background: #34372f; }
+:root[data-theme="dark"] .project-picker-option small { color: #aaa597; }
+:root[data-theme="dark"] .modal { background: #242722; color: #e8e4da; border-color: #44473e; }
+:root[data-theme="dark"] .modal-form label,
+:root[data-theme="dark"] .auth-card label { color: #d0cabc; }
+:root[data-theme="dark"] .modal-backdrop { background: #050605a8; }
+:root[data-theme="dark"] .inline-error,
+:root[data-theme="dark"] .form-error { background: #442a24; border-color: #764437; color: #f1a28a; }
+:root[data-theme="dark"] .toast { background: #22271f; border-color: #434b37; color: #eee9df; }
+:root[data-theme="dark"] .loading-indicator { background: #252822; border-color: #44473e; color: #ccc5b7; }
+:root[data-theme="dark"] .page-footer { color: #89877d; }
+:root[data-theme="dark"] .empty-project { background: #242722; }
+:root[data-theme="dark"] .theme-toggle { gap: 6px; }
+.appearance-settings { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin: 16px 0 20px; padding: 15px; border: 1px solid var(--line); border-radius: 8px; background: var(--white); }
+.appearance-copy { display: flex; flex-direction: column; gap: 5px; }
+.appearance-copy strong { font-size: 11px; }
+.appearance-copy span { font-size: 10px; color: var(--muted); line-height: 1.6; }
+.appearance-options { display: flex; gap: 8px; }
+:root[data-theme="dark"] .appearance-settings { background: #242722; border-color: #3a3d35; }
+:root[data-theme="dark"] .appearance-copy strong { color: #eee9df; }
+:root[data-theme="dark"] .appearance-copy span { color: #aaa597; }
