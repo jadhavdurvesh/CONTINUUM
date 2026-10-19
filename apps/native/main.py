@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import tempfile
 from datetime import datetime
@@ -196,6 +197,49 @@ class CodeEditor(QPlainTextEdit):
         finally:
             self.blockSignals(was_blocked)
         self.line_number_area.update()
+
+    def keyPressEvent(self, event):
+        """Provide editor basics: paired delimiters, indentation and smart Enter."""
+        text = event.text()
+        cursor = self.textCursor()
+        pairs = {"(": ")", "[": "]", "{": "}", '"': '"', "'": "'"}
+
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            line = cursor.block().text()
+            indent = re.match(r"[ \\t]*", line).group(0)
+            trimmed = line.rstrip()
+            if trimmed.endswith((":", "{", "[", "(")):
+                indent += "    "
+            super().keyPressEvent(event)
+            self.insertPlainText(indent)
+            return
+
+        if event.key() == Qt.Key.Key_Tab and not cursor.hasSelection():
+            self.insertPlainText("    ")
+            return
+
+        if text in pairs:
+            closing = pairs[text]
+            if cursor.hasSelection():
+                selected = cursor.selectedText()
+                cursor.insertText(text + selected + closing)
+                cursor.setPosition(cursor.position() - len(closing) - len(selected), QTextCursor.MoveMode.KeepAnchor)
+                self.setTextCursor(cursor)
+            else:
+                cursor.insertText(text + closing)
+                cursor.setPosition(cursor.position() - 1)
+                self.setTextCursor(cursor)
+            return
+
+        if text in pairs.values() and not cursor.hasSelection():
+            if cursor.positionInBlock() < len(cursor.block().text()):
+                block_text = cursor.block().text()
+                if block_text[cursor.positionInBlock()] == text:
+                    cursor.movePosition(QTextCursor.MoveOperation.Right)
+                    self.setTextCursor(cursor)
+                    return
+
+        super().keyPressEvent(event)
 
 
 class ContinueDialog(QDialog):
@@ -480,6 +524,8 @@ class ContinuumWindow(QMainWindow):
         self.workspace_tree.setIndentation(15)
         self.workspace_tree.setAnimated(True)
         self.workspace_tree.setUniformRowHeights(True)
+        self.workspace_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.workspace_tree.customContextMenuRequested.connect(self.explorer_context_menu)
         self.workspace_tree.itemDoubleClicked.connect(self.tree_open_file)
         self.explorer_stack.addWidget(self.workspace_tree)
 
@@ -822,8 +868,6 @@ class ContinuumWindow(QMainWindow):
         self.terminal_dock.setWidget(terminal_host)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.terminal_dock)
         self.terminal_dock.hide()
-        self.view_menu.addAction(self.terminal_dock.toggleViewAction())
-        self.terminal_dock.toggleViewAction().setShortcut(QKeySequence("Ctrl+`"))
 
         # Main window starts with both useful side panels explicitly available.
         self._explorer_visible = True
@@ -1352,6 +1396,121 @@ class ContinuumWindow(QMainWindow):
         self.status_location.setText(str(self.workspace))
         self._building_tree = False
 
+    def explorer_context_menu(self, position):
+        item = self.workspace_tree.itemAt(position)
+        menu = self.workspace_tree.createStandardContextMenu() if hasattr(self.workspace_tree, "createStandardContextMenu") else None
+        from PySide6.QtWidgets import QMenu
+
+        menu = QMenu(self)
+        new_file_action = menu.addAction("New File…")
+        new_folder_action = menu.addAction("New Folder…")
+        menu.addSeparator()
+        copy_path_action = menu.addAction("Copy Relative Path")
+        rename_action = menu.addAction("Rename…") if item is not None else None
+        delete_action = menu.addAction("Delete…") if item is not None else None
+        selected = menu.exec(self.workspace_tree.viewport().mapToGlobal(position))
+        if selected == new_file_action:
+            self.new_file()
+            return
+        if selected == new_folder_action:
+            self.new_folder()
+            return
+        if item is None:
+            return
+        raw = item.data(0, Qt.ItemDataRole.UserRole)
+        if not raw:
+            return
+        target = Path(str(raw))
+        try:
+            relative = target.relative_to(self.workspace) if self.workspace else target
+        except ValueError:
+            return
+        if selected == copy_path_action:
+            QApplication.clipboard().setText(str(relative).replace("\\", "/"))
+        elif selected == rename_action:
+            self.rename_path(target)
+        elif selected == delete_action:
+            self.delete_path(target)
+
+    def new_folder(self):
+        if not self.workspace:
+            self.choose_workspace()
+            if not self.workspace:
+                return
+        relative, accepted = QInputDialog.getText(self, "New Folder", "Relative folder path:")
+        if not accepted:
+            return
+        try:
+            target = safe_file_path(self.workspace, relative)
+            if target.exists():
+                QMessageBox.warning(self, "Folder exists", "Choose a path that does not already exist.")
+                return
+            target.mkdir(parents=True, exist_ok=False)
+            self.refresh_tree()
+            self.statusBar().showMessage("Created folder " + str(target.relative_to(self.workspace)), 4000)
+        except (OSError, ValueError, WorkspaceError) as error:
+            QMessageBox.warning(self, "Cannot create folder", str(error))
+
+    def rename_path(self, target: Path):
+        if not self.workspace:
+            return
+        try:
+            relative = target.relative_to(self.workspace)
+            safe_file_path(self.workspace, str(relative))
+            new_name, accepted = QInputDialog.getText(self, "Rename", "New name:", text=target.name)
+            if not accepted or not new_name.strip():
+                return
+            if "/" in new_name or "\\" in new_name or new_name in {".", ".."}:
+                raise WorkspaceError("Enter a single file or folder name, not a path.")
+            replacement = safe_file_path(self.workspace, str(relative.parent / new_name.strip()))
+            if replacement.exists():
+                raise WorkspaceError("That name already exists.")
+            target.rename(replacement)
+            old_key = str(target)
+            new_key = str(replacement)
+            if old_key in self.open_editors:
+                editor = self.open_editors.pop(old_key)
+                self.open_editors[new_key] = editor
+                if old_key in self.dirty:
+                    self.dirty.discard(old_key)
+                    self.dirty.add(new_key)
+                index = self.editor_tabs.indexOf(editor)
+                if index >= 0:
+                    self.editor_tabs.setTabText(index, replacement.name + (" •" if new_key in self.dirty else ""))
+                    self.editor_tabs.setTabToolTip(index, new_key)
+            self.refresh_tree()
+        except (OSError, ValueError, WorkspaceError) as error:
+            QMessageBox.warning(self, "Cannot rename path", str(error))
+
+    def delete_path(self, target: Path):
+        if not self.workspace:
+            return
+        try:
+            relative = target.relative_to(self.workspace)
+            safe_file_path(self.workspace, str(relative))
+            if target.is_dir():
+                if any(target.iterdir()):
+                    QMessageBox.warning(self, "Folder not empty", "Move or delete its contents individually before deleting this folder.")
+                    return
+            answer = QMessageBox.question(
+                self, "Delete workspace item",
+                "Delete '" + target.name + "' from the local workspace? This cannot be undone.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            target.unlink() if target.is_file() else target.rmdir()
+            key = str(target)
+            editor = self.open_editors.pop(key, None)
+            self.dirty.discard(key)
+            if editor is not None:
+                index = self.editor_tabs.indexOf(editor)
+                if index >= 0:
+                    self.editor_tabs.removeTab(index)
+            self.refresh_tree()
+        except (OSError, ValueError, WorkspaceError) as error:
+            QMessageBox.warning(self, "Cannot delete path", str(error))
+
     def _populate_tree(self, folder: Path, parent: QTreeWidgetItem, depth: int, budget: list[int]):
         if depth > 7 or budget[0] <= 0:
             return
@@ -1406,6 +1565,7 @@ class ContinuumWindow(QMainWindow):
         editor.setPlainText(content)
         editor.document().setModified(False)
         editor.textChanged.connect(lambda path_key=key, widget=editor: self.editor_changed(path_key, widget))
+        editor.cursorPositionChanged.connect(self.update_editor_status)
         index = self.editor_tabs.addTab(editor, absolute.name)
         self.editor_tabs.setTabToolTip(index, key)
         self.editor_tabs.setCurrentIndex(index)
@@ -1676,8 +1836,9 @@ class ContinuumWindow(QMainWindow):
         self.email.setEnabled(not signed and self.cloud.configured)
         self.password.setEnabled(not signed and self.cloud.configured)
         self.projects_combo.setEnabled(signed)
-        self.cloud_button.setText("Cloud Connected" if signed else "Connect Cloud")
-        self.cloud_button.setEnabled(not signed and self.cloud.configured)
+        self.cloud_button.setText("Cloud & Agents" if signed else "Connect Cloud")
+        # This is a panel toggle after sign-in, not a second disabled connection badge.
+        self.cloud_button.setEnabled(True)
         self.status_cloud.setText("Cloud connected" if signed else "Cloud optional")
 
     def create_agent_session(self):
