@@ -25,7 +25,8 @@ def main() -> None:
     assert window.theme in {"dark", "light"}
 
     with tempfile.TemporaryDirectory(prefix="continuum-ui-smoke-") as tmp:
-        root = Path(tmp)
+        # Resolve Windows TEMP's possible 8.3 path alias before constructing paths.
+        root = Path(tmp).resolve()
         sample = root / "src" / "main.py"
         sample.parent.mkdir(parents=True)
         sample.write_text("def hello():\n    return 'CONTINUUM'\n", encoding="utf-8")
@@ -58,6 +59,8 @@ def main() -> None:
         window.toggle_cloud_panel(True)
         assert not window.cloud_panel.isHidden()
 
+        window.dirty.clear()
+        editor.document().setModified(False)
         window.close()
 
     print("Native Qt workbench smoke test passed.")
