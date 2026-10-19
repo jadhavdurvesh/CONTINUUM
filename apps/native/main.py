@@ -107,7 +107,7 @@ class CodeSyntaxHighlighter(QSyntaxHighlighter):
             (QRegularExpression(r"\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b"), fmt(palette["number"])),
             (QRegularExpression(r"\b[A-Za-z_]\w*(?=\s*\()"), fmt(palette["function"])),
             (QRegularExpression(r"\b[A-Z][A-Za-z0-9_]*\b"), fmt(palette["type"])),
-            (QRegularExpression(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|"`[^`]*`'), fmt(palette["string"])),
+            (QRegularExpression(r"""(['"]).*?\1"""), fmt(palette["string"])),
             (QRegularExpression(r"#[^\n]*|//[^\n]*|/\*.*?\*/"), fmt(palette["comment"], italic=True)),
         ]
         self.rehighlight()
@@ -1135,6 +1135,9 @@ class ContinuumWindow(QMainWindow):
         self.email.setEnabled(not signed and self.cloud.configured)
         self.password.setEnabled(not signed and self.cloud.configured)
         self.projects_combo.setEnabled(signed)
+        self.cloud_button.setText("Cloud Connected" if signed else "Connect Cloud")
+        self.cloud_button.setEnabled(not signed and self.cloud.configured)
+        self.status_cloud.setText("Cloud connected" if signed else "Cloud optional")
 
     def create_agent_session(self):
         project_id = self.selected_project_id()
