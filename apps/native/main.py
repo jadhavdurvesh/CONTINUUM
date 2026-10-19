@@ -9,14 +9,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, QSettings, QTimer, QSize
-from PySide6.QtGui import QAction, QFont, QKeySequence, QTextCursor
+from PySide6.QtCore import Qt, QSettings, QTimer, QSize, QRect, QRegularExpression
+from PySide6.QtGui import (
+    QAction, QActionGroup, QColor, QFont, QKeySequence, QPainter, QPalette,
+    QSyntaxHighlighter, QTextCharFormat, QTextCursor
+)
 from PySide6.QtWidgets import (
-    QApplication, QComboBox, QDialog, QDialogButtonBox, QFileDialog,
-    QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QMainWindow, QMessageBox, QPlainTextEdit, QPushButton,
-    QSplitter, QTabWidget, QToolBar, QTreeWidget, QTreeWidgetItem,
-    QVBoxLayout, QWidget, QInputDialog, QStatusBar
+    QApplication, QComboBox, QDialog, QDialogButtonBox, QDockWidget,
+    QFileDialog, QFormLayout, QFrame, QGridLayout, QHBoxLayout, QLabel,
+    QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
+    QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QStackedWidget,
+    QStatusBar, QStyle, QTabWidget, QToolBar, QToolButton, QTreeWidget,
+    QTreeWidgetItem, QVBoxLayout, QWidget, QInputDialog, QTextEdit
 )
 
 from continuum.cloud import CloudClient, CloudError
@@ -38,6 +42,152 @@ def user_data_dir() -> Path:
     path = base / "CONTINUUM" / "backups"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+class LineNumberArea(QWidget):
+    """Gutter widget that paints line numbers for the source editor."""
+
+    def __init__(self, editor: "CodeEditor"):
+        super().__init__(editor)
+        self.editor = editor
+        self.setObjectName("lineNumberArea")
+
+    def sizeHint(self):
+        return QSize(self.editor.line_number_area_width(), 0)
+
+    def paintEvent(self, event):
+        self.editor.paint_line_numbers(event)
+
+
+class CodeSyntaxHighlighter(QSyntaxHighlighter):
+    """Small, fast syntax highlighter for common programming-language tokens."""
+
+    KEYWORDS = (
+        "and as assert async await break case class const continue def del elif else "
+        "except export extends finally for from fun function global if import in is "
+        "lambda let match nonlocal not or pass raise return static struct try type "
+        "using var void while with yield public private protected interface enum "
+        "implements package switch throw new this super self"
+    )
+
+    def __init__(self, document, theme="dark"):
+        super().__init__(document)
+        self.theme = theme
+        self.rules = []
+        self.set_theme(theme)
+
+    def set_theme(self, theme):
+        self.theme = theme
+        palette = {
+            "dark": {
+                "keyword": "#c586c0", "string": "#ce9178", "comment": "#6a9955",
+                "number": "#b5cea8", "function": "#dcdcaa", "type": "#4ec9b0",
+                "constant": "#569cd6",
+            },
+            "light": {
+                "keyword": "#7c3aed", "string": "#a31515", "comment": "#008000",
+                "number": "#098658", "function": "#795e26", "type": "#267f99",
+                "constant": "#0000ff",
+            },
+        }["dark" if theme == "dark" else "light"]
+
+        def fmt(color, bold=False, italic=False):
+            value = QTextCharFormat()
+            value.setForeground(QColor(color))
+            if bold:
+                value.setFontWeight(QFont.Weight.Bold)
+            if italic:
+                value.setFontItalic(True)
+            return value
+
+        keyword_pattern = r"\b(?:" + "|".join(self.KEYWORDS.split()) + r")\b"
+        self.rules = [
+            (QRegularExpression(keyword_pattern), fmt(palette["keyword"], True)),
+            (QRegularExpression(r"\b(?:true|false|null|None|True|False|undefined|self)\b"), fmt(palette["constant"])),
+            (QRegularExpression(r"\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b"), fmt(palette["number"])),
+            (QRegularExpression(r"\b[A-Za-z_]\w*(?=\s*\()"), fmt(palette["function"])),
+            (QRegularExpression(r"\b[A-Z][A-Za-z0-9_]*\b"), fmt(palette["type"])),
+            (QRegularExpression(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|"`[^`]*`'), fmt(palette["string"])),
+            (QRegularExpression(r"#[^\n]*|//[^\n]*|/\*.*?\*/"), fmt(palette["comment"], italic=True)),
+        ]
+        self.rehighlight()
+
+    def highlightBlock(self, text):
+        for expression, text_format in self.rules:
+            iterator = expression.globalMatch(text)
+            while iterator.hasNext():
+                match = iterator.next()
+                self.setFormat(match.capturedStart(), match.capturedLength(), text_format)
+
+
+class CodeEditor(QPlainTextEdit):
+    """IDE-oriented editor with a line-number gutter and token highlighting."""
+
+    def __init__(self, theme="dark", parent=None):
+        super().__init__(parent)
+        self.theme = theme
+        self.line_number_area = LineNumberArea(self)
+        self.highlighter = CodeSyntaxHighlighter(self.document(), theme)
+        self.setObjectName("codeEditor")
+        self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.setFont(QFont("Cascadia Code" if sys.platform == "win32" else "DejaVu Sans Mono", 10))
+        self.setTabStopDistance(self.fontMetrics().horizontalAdvance(" ") * 4)
+        self.blockCountChanged.connect(self.update_line_number_area_width)
+        self.updateRequest.connect(self.update_line_number_area)
+        self.update_line_number_area_width(0)
+
+    def line_number_area_width(self):
+        digits = max(2, len(str(max(1, self.blockCount()))))
+        return 13 + self.fontMetrics().horizontalAdvance("9") * digits
+
+    def update_line_number_area_width(self, _count):
+        self.setViewportMargins(self.line_number_area_width(), 0, 0, 0)
+
+    def update_line_number_area(self, rect, dy):
+        if dy:
+            self.line_number_area.scroll(0, dy)
+        else:
+            self.line_number_area.update(0, rect.y(), self.line_number_area.width(), rect.height())
+        if rect.contains(self.viewport().rect()):
+            self.update_line_number_area_width(0)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        contents = self.contentsRect()
+        self.line_number_area.setGeometry(QRect(
+            contents.left(), contents.top(), self.line_number_area_width(), contents.height()
+        ))
+
+    def paint_line_numbers(self, event):
+        painter = QPainter(self.line_number_area)
+        dark = self.theme == "dark"
+        painter.fillRect(event.rect(), QColor("#1e1e1e" if dark else "#f4f4f4"))
+        painter.setPen(QColor("#858585" if dark else "#777777"))
+        block = self.firstVisibleBlock()
+        block_number = block.blockNumber()
+        top = int(self.blockBoundingGeometry(block).translated(self.contentOffset()).top())
+        height = int(self.blockBoundingRect(block).height())
+        bottom = top + height
+        while block.isValid() and top <= event.rect().bottom():
+            if block.isVisible() and bottom >= event.rect().top():
+                number_color = "#d4d4d4" if block_number == self.textCursor().blockNumber() and dark else (
+                    "#333333" if block_number == self.textCursor().blockNumber() else "#858585" if dark else "#777777"
+                )
+                painter.setPen(QColor(number_color))
+                painter.drawText(
+                    0, top, self.line_number_area.width() - 7, self.fontMetrics().height(),
+                    Qt.AlignmentFlag.AlignRight, str(block_number + 1)
+                )
+            block = block.next()
+            block_number += 1
+            top = bottom
+            height = int(self.blockBoundingRect(block).height()) if block.isValid() else 0
+            bottom = top + height
+
+    def set_theme(self, theme):
+        self.theme = theme
+        self.highlighter.set_theme(theme)
+        self.line_number_area.update()
 
 
 class ContinueDialog(QDialog):
@@ -70,6 +220,9 @@ class ContinuumWindow(QMainWindow):
         self.messages: list[dict[str, Any]] = []
         self.active_session: dict[str, Any] | None = None
         self._building_tree = False
+        self.theme = str(self.settings.value("theme", "dark"))
+        if self.theme not in {"dark", "light"}:
+            self.theme = "dark"
         self._build_ui()
         restored = self.settings.value("workspace", "", type=str)
         if restored and Path(restored).is_dir():
@@ -331,11 +484,7 @@ class ContinuumWindow(QMainWindow):
             self.editor_tabs.setCurrentWidget(self.open_editors[key])
             return
         self._remove_welcome()
-        editor = QPlainTextEdit()
-        editor.setObjectName("codeEditor")
-        editor.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-        editor.setFont(QFont(EDITOR_FONT, 10))
-        editor.setTabStopDistance(editor.fontMetrics().horizontalAdvance(" ") * 4)
+        editor = CodeEditor(self.theme)
         editor.setPlainText(content)
         editor.document().setModified(False)
         editor.textChanged.connect(lambda path_key=key, widget=editor: self.editor_changed(path_key, widget))
