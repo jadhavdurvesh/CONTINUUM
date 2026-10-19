@@ -185,8 +185,16 @@ class CodeEditor(QPlainTextEdit):
             bottom = top + height
 
     def set_theme(self, theme):
-        self.theme = theme
-        self.highlighter.set_theme(theme)
+        # Highlighting changes formatting, not source content. Preserve the editor's
+        # dirty state and suppress plain-text signals during the recolor pass.
+        was_modified = self.document().isModified()
+        was_blocked = self.blockSignals(True)
+        try:
+            self.theme = theme
+            self.highlighter.set_theme(theme)
+            self.document().setModified(was_modified)
+        finally:
+            self.blockSignals(was_blocked)
         self.line_number_area.update()
 
 
