@@ -1395,10 +1395,10 @@ class ContinuumWindow(QMainWindow):
         self.project_label.setToolTip(str(self.workspace))
         self.status_location.setText(str(self.workspace))
         self._building_tree = False
+        self.filter_explorer_tree(self.explorer_filter.text())
 
     def explorer_context_menu(self, position):
         item = self.workspace_tree.itemAt(position)
-        menu = self.workspace_tree.createStandardContextMenu() if hasattr(self.workspace_tree, "createStandardContextMenu") else None
         from PySide6.QtWidgets import QMenu
 
         menu = QMenu(self)
@@ -2062,6 +2062,9 @@ class ContinuumWindow(QMainWindow):
             QMessageBox.warning(self, "Could not continue session", str(error))
 
     def closeEvent(self, event):
+        if hasattr(self, "terminal_process") and self.terminal_process.state() != QProcess.ProcessState.NotRunning:
+            self.terminal_process.kill()
+            self.terminal_process.waitForFinished(1000)
         unsaved = [Path(path).name for path in self.dirty]
         if unsaved:
             answer = QMessageBox.question(self, "Unsaved changes", "Save all modified files before quitting?\n\n" + "\n".join(unsaved), QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
