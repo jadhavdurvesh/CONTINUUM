@@ -927,11 +927,13 @@ class ContinuumWindow(QMainWindow):
     def toggle_terminal(self, *_args):
         if not hasattr(self, "terminal_dock"):
             return
-        if self.terminal_dock.isVisible():
-            self.terminal_dock.hide()
-        else:
+        # isHidden() reports the explicit dock state even while the parent window
+        # is hidden (as it is during offscreen CI smoke tests).
+        if self.terminal_dock.isHidden():
             self.terminal_dock.show()
             self.terminal_input.setFocus()
+        else:
+            self.terminal_dock.hide()
 
     def append_terminal_text(self, text: str):
         if text:
@@ -1668,6 +1670,9 @@ class ContinuumWindow(QMainWindow):
         self.update_editor_status()
 
     def update_editor_status(self, *_args):
+        # QTabWidget may emit currentChanged while the window is still building.
+        if not hasattr(self, "editor_status") or not hasattr(self, "language_status"):
+            return
         path, editor = self.current_editor()
         if not path or editor is None:
             self.editor_status.setText("Ready  ·  Open a folder or create a file")
