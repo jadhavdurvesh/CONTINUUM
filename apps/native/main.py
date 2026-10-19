@@ -291,8 +291,8 @@ class ContinuumWindow(QMainWindow):
         about_action.triggered.connect(
             lambda: QMessageBox.about(
                 self, "About CONTINUUM",
-                "CONTINUUM Engineering Workspace\\n\\n"
-                "A local-first native IDE with optional shared cloud projects and AI agents.\\n"
+                "CONTINUUM Engineering Workspace\n\n"
+                "A local-first native IDE with optional shared cloud projects and AI agents.\n"
                 "Your local files remain on this machine unless you explicitly send selected context to a cloud agent."
             )
         )
@@ -522,7 +522,7 @@ class ContinuumWindow(QMainWindow):
         actions_grid.setVerticalSpacing(10)
 
         def welcome_action(glyph, title, detail, callback, row, col):
-            action = QPushButton(f"{glyph}   {title}\\n{detail}")
+            action = QPushButton(f"{glyph}   {title}\n{detail}")
             action.setObjectName("welcomeAction")
             action.setMinimumHeight(76)
             action.setMinimumWidth(190)
@@ -716,7 +716,6 @@ class ContinuumWindow(QMainWindow):
         self.status_cloud = QLabel("Cloud optional")
         self.status_cloud.setObjectName("statusBarText")
         status.addPermanentWidget(self.status_cloud)
-        self.statusBar().setVisible(False)
         self.setStatusBar(status)
         self.statusBar().showMessage("Local-first workspace • Files stay on this PC unless you explicitly send context to a cloud agent.")
 
@@ -760,7 +759,7 @@ class ContinuumWindow(QMainWindow):
     def show_preferences(self):
         QMessageBox.information(
             self, "CONTINUUM Preferences",
-            "Appearance is saved per Windows user. Use the top-bar theme button or View → Use Light Theme.\\n\\n"
+            "Appearance is saved per Windows user. Use the top-bar theme button or View → Use Light Theme.\n\n"
             "Local file editing works offline; cloud sign-in and AI-agent runs need a network connection."
         )
 
@@ -780,6 +779,8 @@ class ContinuumWindow(QMainWindow):
         self.cloud_badge.setProperty("state", state)
         self.cloud_badge.style().unpolish(self.cloud_badge)
         self.cloud_badge.style().polish(self.cloud_badge)
+        if state != "online":
+            self.cloud_status_dot.setStyleSheet("")
 
     def choose_workspace(self):
         folder = QFileDialog.getExistingDirectory(self, "Open project folder", str(self.workspace or Path.home()))
@@ -787,20 +788,27 @@ class ContinuumWindow(QMainWindow):
             self.set_workspace(Path(folder))
 
     def set_workspace(self, folder: Path):
-        self.workspace = folder.resolve()
+        self.workspace = folder.expanduser().resolve()
         self.settings.setValue("workspace", str(self.workspace))
-        self.project_label.setText(str(self.workspace))
+        self.project_label.setText(self.workspace.name or str(self.workspace))
+        self.project_label.setToolTip(str(self.workspace))
+        self.status_location.setText(str(self.workspace))
         self.refresh_tree()
-        self.statusBar().showMessage("Local project opened: " + str(self.workspace))
+        self.statusBar().showMessage("Local project opened: " + str(self.workspace), 5000)
 
     def refresh_tree(self):
         self._building_tree = True
         self.workspace_tree.clear()
         if not self.workspace or not self.workspace.is_dir():
+            self.explorer_stack.setCurrentWidget(self.explorer_empty)
             self._building_tree = False
             return
         self._populate_tree(self.workspace, self.workspace_tree.invisibleRootItem(), 0, [1600])
         self.workspace_tree.expandToDepth(1)
+        self.explorer_stack.setCurrentWidget(self.workspace_tree)
+        self.project_label.setText(self.workspace.name or str(self.workspace))
+        self.project_label.setToolTip(str(self.workspace))
+        self.status_location.setText(str(self.workspace))
         self._building_tree = False
 
     def _populate_tree(self, folder: Path, parent: QTreeWidgetItem, depth: int, budget: list[int]):
@@ -961,10 +969,27 @@ class ContinuumWindow(QMainWindow):
     def update_editor_status(self, *_args):
         path, editor = self.current_editor()
         if not path or editor is None:
-            self.editor_status.setText("No file open")
-        else:
-            cursor = editor.textCursor()
-            self.editor_status.setText(f"Ln {cursor.blockNumber()+1}  ·  Col {cursor.positionInBlock()+1}  ·  {'Modified' if path in self.dirty else 'Saved'}")
+            self.editor_status.setText("Ready  ·  Open a folder or create a file")
+            self.language_status.setText("Workspace")
+            self.encoding_status.setText("UTF-8")
+            return
+        cursor = editor.textCursor()
+        state = "Modified" if path in self.dirty else "Saved"
+        self.editor_status.setText(
+            f"Ln {cursor.blockNumber()+1}  ·  Col {cursor.positionInBlock()+1}  ·  {state}"
+        )
+        suffix = Path(path).suffix.lower()
+        languages = {
+            ".py": "Python", ".pyw": "Python", ".js": "JavaScript", ".jsx": "React JSX",
+            ".ts": "TypeScript", ".tsx": "React TSX", ".json": "JSON", ".md": "Markdown",
+            ".html": "HTML", ".css": "CSS", ".scss": "SCSS", ".sql": "SQL",
+            ".yaml": "YAML", ".yml": "YAML", ".toml": "TOML", ".sh": "Shell",
+            ".bat": "Batch", ".ps1": "PowerShell", ".cpp": "C++", ".c": "C",
+            ".h": "C/C++ Header", ".java": "Java", ".kt": "Kotlin", ".dart": "Dart",
+            ".rs": "Rust", ".go": "Go", ".xml": "XML", ".txt": "Plain Text",
+        }
+        self.language_status.setText(languages.get(suffix, "Plain Text"))
+        self.encoding_status.setText("UTF-8")
 
     def try_restore_cloud(self):
         try:
@@ -996,6 +1021,8 @@ class ContinuumWindow(QMainWindow):
         email = str((self.cloud.user or {}).get("email", "signed in"))
         self.cloud_status.setText("Signed in as " + email + ". Local files remain on this PC; agent sessions and history live in the cloud.")
         self.set_cloud_badge("CLOUD CONNECTED", "online")
+        self.cloud_status_dot.setStyleSheet("color: #27bba7;")
+        self.status_cloud.setText("Cloud connected")
         self.refresh_projects()
 
     def sign_out_cloud(self):
@@ -1006,6 +1033,9 @@ class ContinuumWindow(QMainWindow):
         self.projects_combo.clear()
         self.session_list.clear()
         self.set_cloud_badge("LOCAL MODE", "neutral")
+        self.cloud_status_dot.setStyleSheet("")
+        self.status_cloud.setText("Cloud optional")
+        self.session_count.setText("0")
         self.cloud_status.setText("Signed out. Local file editing continues to work.")
         self.update_cloud_controls()
 
@@ -1042,6 +1072,8 @@ class ContinuumWindow(QMainWindow):
             return
         try:
             self.sessions = self.cloud.sessions(project_id)
+            if hasattr(self, "session_count"):
+                self.session_count.setText(str(len(self.sessions)))
             active_id = preserve_id or (self.active_session or {}).get("id")
             self.session_list.blockSignals(True)
             self.session_list.clear()
