@@ -2148,6 +2148,17 @@ QWidget#lineNumberArea { background: #1e1e1e; }
 QPlainTextEdit#codeEditor { background: #1e1e1e; color: #d4d4d4; selection-background-color: #264f78; border: none; padding: 7px 9px; font-size: 10pt; }
 QLineEdit#cloudInput, QComboBox#cloudInput, QPlainTextEdit#goalInput { background: #191c22; color: #e1e6ee; border: 1px solid #3a404a; border-radius: 5px; padding: 8px 9px; selection-background-color: #245d63; }
 QLineEdit#cloudInput:focus, QComboBox#cloudInput:focus, QPlainTextEdit#goalInput:focus { border: 1px solid #248e84; }
+QLineEdit#explorerFilter, QLineEdit#terminalInput { background: #171a20; color: #e2e7ef; border: 1px solid #3a414d; border-radius: 5px; padding: 9px 10px; selection-background-color: #245d63; }
+QLineEdit#explorerFilter:focus, QLineEdit#terminalInput:focus { border: 1px solid #248e84; }
+QListWidget#quickOpenList { background: #202329; color: #dce2eb; border: 1px solid #383e49; border-radius: 5px; outline: none; }
+QListWidget#quickOpenList::item { padding: 7px 9px; border-bottom: 1px solid #2d323a; }
+QListWidget#quickOpenList::item:selected { background: #293c42; color: #8ce9db; }
+QListWidget#quickOpenList::item:hover { background: #2a2e36; }
+QDockWidget#terminalDock { color: #b9c3d1; background: #202329; }
+QDockWidget#terminalDock::title { background: #202329; border-bottom: 1px solid #343943; padding: 8px 12px; text-align: left; font-weight: 700; }
+QPlainTextEdit#terminalOutput { background: #17191e; color: #d6dce5; border: 1px solid #363b45; border-radius: 5px; padding: 8px; selection-background-color: #264f78; }
+QLabel#terminalPrompt { color: #6de0d0; font-family: "Cascadia Code"; font-weight: 700; padding: 0 5px; }
+
 QComboBox#cloudInput::drop-down { border: none; width: 23px; }
 QComboBox QAbstractItemView { background: #252930; color: #e0e5ed; selection-background-color: #293c42; border: 1px solid #414752; }
 QLabel#cloudStatus { color: #a6b0bf; font-size: 9pt; line-height: 1.45; padding-bottom: 2px; }
@@ -2237,6 +2248,17 @@ QWidget#lineNumberArea { background: #f4f4f4; }
 QPlainTextEdit#codeEditor { background: #ffffff; color: #24292f; selection-background-color: #add6ff; border: none; padding: 7px 9px; font-size: 10pt; }
 QLineEdit#cloudInput, QComboBox#cloudInput, QPlainTextEdit#goalInput { background: #ffffff; color: #242a33; border: 1px solid #d8dee7; border-radius: 5px; padding: 8px 9px; selection-background-color: #cde9e5; }
 QLineEdit#cloudInput:focus, QComboBox#cloudInput:focus, QPlainTextEdit#goalInput:focus { border: 1px solid #0e9f92; }
+QLineEdit#explorerFilter, QLineEdit#terminalInput { background: #ffffff; color: #222832; border: 1px solid #d6dce5; border-radius: 5px; padding: 9px 10px; selection-background-color: #cde9e5; }
+QLineEdit#explorerFilter:focus, QLineEdit#terminalInput:focus { border: 1px solid #0e9f92; }
+QListWidget#quickOpenList { background: #ffffff; color: #343c48; border: 1px solid #dce1e8; border-radius: 5px; outline: none; }
+QListWidget#quickOpenList::item { padding: 7px 9px; border-bottom: 1px solid #edf0f4; }
+QListWidget#quickOpenList::item:selected { background: #e2f4f0; color: #006f65; }
+QListWidget#quickOpenList::item:hover { background: #f1f3f6; }
+QDockWidget#terminalDock { color: #46505e; background: #ffffff; }
+QDockWidget#terminalDock::title { background: #f4f6f8; border-bottom: 1px solid #dfe3e9; padding: 8px 12px; text-align: left; font-weight: 700; }
+QPlainTextEdit#terminalOutput { background: #fbfcfd; color: #242a33; border: 1px solid #dce1e8; border-radius: 5px; padding: 8px; selection-background-color: #add6ff; }
+QLabel#terminalPrompt { color: #087f75; font-family: "Cascadia Code"; font-weight: 700; padding: 0 5px; }
+
 QComboBox#cloudInput::drop-down { border: none; width: 23px; }
 QComboBox QAbstractItemView { background: #ffffff; color: #343c48; selection-background-color: #e2f4f0; border: 1px solid #dce1e8; }
 QLabel#cloudStatus { color: #626d7c; font-size: 9pt; line-height: 1.45; padding-bottom: 2px; }
