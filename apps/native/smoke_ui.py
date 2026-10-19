@@ -40,9 +40,13 @@ def main() -> None:
         window.apply_theme("light")
         assert editor.theme == "light"
         assert editor.highlighter.theme == "light"
+        assert path not in window.dirty, "Theme switch must not dirty source files"
+        assert not editor.document().isModified(), "Theme switch must preserve the saved document state"
         window.toggle_theme()
         assert editor.theme == "dark"
         assert editor.highlighter.theme == "dark"
+        assert path not in window.dirty, "Switching back must not dirty source files"
+        assert not editor.document().isModified(), "Theme switch must preserve the saved document state"
 
         window.toggle_explorer(False)
         assert window.explorer_panel.isHidden()
