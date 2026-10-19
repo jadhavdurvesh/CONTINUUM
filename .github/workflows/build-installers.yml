@@ -3,6 +3,10 @@ name: Build native desktop installer
 on:
   workflow_dispatch:
   push:
+    branches: [main]
+    paths:
+      - "apps/native/**"
+      - ".github/workflows/build-installers.yml"
     tags:
       - "v*"
 
@@ -29,6 +33,11 @@ jobs:
       - name: Test safe local workspace behavior
         working-directory: apps/native
         run: python -m unittest discover -s tests -v
+      - name: Smoke test native Qt workbench
+        working-directory: apps/native
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python smoke_ui.py
       - name: Generate release cloud configuration from repository secrets
         working-directory: apps/native
         shell: pwsh
