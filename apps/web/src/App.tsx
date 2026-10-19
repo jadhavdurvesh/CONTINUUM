@@ -4,7 +4,7 @@ import {
   Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, Bell, BookOpen, Bot, Boxes, Code2,
   Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, Command,
   FileText, FlaskConical, HardDrive, LayoutGrid, LockKeyhole, LogOut,
-  Menu, Plus, Radio, Search, Settings2, ShieldCheck, ShieldEllipsis, Terminal,
+  Menu, Moon, Plus, Radio, Search, Settings2, ShieldCheck, ShieldEllipsis, Sun, Terminal,
   Target, Users, Workflow, X, Zap
 } from "lucide-react";
 import { cloudConfigured, supabase, type ActivityEvent, type Project, type Task } from "./lib/supabase";
@@ -61,6 +61,15 @@ function App() {
   const [filter, setFilter] = useState("all");
   const [toast, setToast] = useState("");
   const [mobileNav, setMobileNav] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof window === "undefined") return "light";
+    return window.localStorage.getItem("continuum.theme") === "dark" ? "dark" : "light";
+  });
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem("continuum.theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     if (!supabase) { setAuthReady(true); return; }
@@ -330,13 +339,35 @@ function App() {
     <main className="main-area">
       <header className="topbar">
         <div className="topbar-left"><button className="icon-quiet menu-toggle" onClick={() => setMobileNav(true)} aria-label="Open navigation"><Menu size={19}/></button><div className="breadcrumbs"><span>Workspace</span><ChevronRight size={13}/><strong>{pageTitle}</strong></div></div>
-        <div className="topbar-right"><div className="sync-status"><span className="online-pulse"/><span>{page === "Local IDE" ? "Local worker mode" : "Cloud connected"}</span></div><button className="top-icon" onClick={() => setShowCommand(true)} aria-label="Search workspace"><Search size={17}/><kbd>⌘ K</kbd></button><button className="top-icon notification" aria-label="Notifications"><Bell size={17}/><i/></button><div className="top-avatar">{(session.user.email?.[0] ?? "U").toUpperCase()}</div></div>
+        <div className="topbar-right"><div className="sync-status"><span className="online-pulse"/><span>{page === "Local IDE" ? "Local worker mode" : "Cloud connected"}</span></div><button className="top-icon" onClick={() => setShowCommand(true)} aria-label="Search workspace"><Search size={17}/><kbd>⌘ K</kbd></button><button className="top-icon theme-toggle" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"} title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}>{theme === "dark" ? <Sun size={16}/> : <Moon size={16}/>}<span>{theme === "dark" ? "Light" : "Dark"}</span></button><button className="top-icon notification" aria-label="Notifications"><Bell size={17}/><i/></button><div className="top-avatar">{(session.user.email?.[0] ?? "U").toUpperCase()}</div></div>
       </header>
       <div className="page-body">
         <div className="page-intro"><div><div className="eyebrow"><span className="eyebrow-mark"/> PROJECT CONTROL / {project ? project.status.toUpperCase() : "SETUP"}</div><h1>{page === "Overview" ? <>The work, <em>in context.</em></> : pageTitle}</h1><p>{pageDescription[page]}</p></div><div className="intro-actions"><button className="button secondary" onClick={() => void loadProjectData()}><Radio size={15}/> Refresh</button><button className="button primary" onClick={() => project ? setShowTaskForm(true) : setShowProjectForm(true)}><Plus size={16}/>{project ? "New task" : "New project"}</button></div></div>
 
         {loadError && <div className="inline-error"><ShieldEllipsis size={16}/><span>{loadError}</span></div>}
-        {!project ? <section className="empty-project panel"><div className="empty-stamp"><Boxes size={24}/></div><div className="eyebrow">NO PROJECT SELECTED</div><h2>Give the work a home.</h2><p>Create your first shared project. Its tasks, decisions, audit history, locks, and agent activity will live in the cloud—not in a single PC or chat.</p><button className="button primary" onClick={() => setShowProjectForm(true)}><Plus size={16}/> Create the first project</button></section> :
+        {page === "Settings" ? <section className="panel full-panel">
+          <div className="panel-heading"><div><div className="section-kicker">WORKSPACE ADMINISTRATION</div><h2>Workspace settings</h2><p>Account, appearance, and cloud connection details.</p></div><Settings2 size={19} className="muted-icon"/></div>
+          <div className="settings-list">
+            <div><span>Signed in as</span><strong>{session.user.email}</strong></div>
+            <div><span>Workspace role</span><strong>{project ? (isOwner ? "Owner" : "Collaborator") : "Not assigned yet"}</strong></div>
+            <div><span>Backend</span><strong>Hosted Supabase · PostgreSQL</strong></div>
+            <div><span>Realtime sync</span><strong>{project ? "Subscribed for this project" : "Available after a project is created"}</strong></div>
+            <div><span>Project ID</span><code>{project?.id ?? "No project selected"}</code></div>
+          </div>
+          <div className="appearance-settings">
+            <div className="appearance-copy"><strong>Appearance</strong><span>Choose the theme for this browser. Your choice is saved on this device.</span></div>
+            <div className="appearance-options">
+              <button className={`button ${theme === "light" ? "primary" : "secondary"}`} onClick={() => setTheme("light")} aria-pressed={theme === "light"}><Sun size={15}/> Light</button>
+              <button className={`button ${theme === "dark" ? "primary" : "secondary"}`} onClick={() => setTheme("dark")} aria-pressed={theme === "dark"}><Moon size={15}/> Dark</button>
+            </div>
+          </div>
+          <button className="button secondary" onClick={() => void signOut()}><LogOut size={15}/> Sign out</button>
+        </section> : !project ? <section className="empty-project panel">
+          <div className="empty-stamp"><Boxes size={24}/></div><div className="eyebrow">NO PROJECT SELECTED</div>
+          <h2>{page === "Overview" ? "Give the work a home." : `Create a project to open ${page.toLowerCase()}.`}</h2>
+          <p>{page === "Overview" ? "Create your first shared project. Its tasks, decisions, audit history, locks, and agent activity will live in the cloud—not in a single PC or chat." : `You are viewing ${page}. Create your first shared project to unlock this page's project data, tools, and collaboration controls.`}</p>
+          <button className="button primary" onClick={() => setShowProjectForm(true)}><Plus size={16}/> Create the first project</button>
+        </section> :
         page === "Local IDE" ? <LocalIDE key={project.id} projectId={project.id} userId={currentUserId ?? ""} accessToken={session.access_token ?? ""} isOwner={isOwner} onNotify={notify}/> :
         page === "Code Workbench" ? <CodeWorkbench key={project.id} projectId={project.id} userId={currentUserId ?? ""} isOwner={isOwner} onNotify={notify}/> :
         page === "Overview" ? <>
