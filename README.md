@@ -117,6 +117,6 @@ python -m unittest discover -s tests -v
 - Model changes are proposals; the user chooses when to apply them. Existing local files are backed up before applying.
 - Git commit, push, deployment, destructive operations, and unrestricted shell execution are not automatic.
 
-## License
+## License and third-party components
 
-Use is restricted by the proprietary terms in LICENSE. No open-source license is granted.
+CONTINUUM-owned source, designs, documentation and other proprietary materials are governed by the root `LICENSE`. The Theia desktop bundles separately licensed third-party packages; those licenses and notice obligations are not overridden by the root license. See [Theia third-party notices](apps/theia/THIRD_PARTY_NOTICES.md) and [the migration plan](docs/theia-migration.md). Review the exact dependency inventory before distributing a binary.
