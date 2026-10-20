@@ -49,6 +49,10 @@ Then run the **Build native desktop installer** workflow. It generates the ignor
 
 If the Vercel deployment URL changes, update CONTINUUM_CLOUD_API_URL and build a new installer. The desktop local IDE works offline regardless; only cloud features depend on the deployment being reachable.
 
+## Eclipse Theia desktop candidate
+
+The Theia-based desktop in `apps/theia` consumes the same hosted services; it does not change Vercel's root directory or require additional model-provider secrets. The first migration stage opens the hosted dashboard from a Theia command. An authenticated agent panel will be added later by reusing the current Supabase session and the existing Vercel endpoints. Do not place provider keys or Supabase service-role credentials in Theia preferences, plugin settings or installer artifacts. The current PySide6 desktop installer remains available until the Theia candidate passes release smoke tests. See [the migration plan](theia-migration.md).
+
 ## Smoke checks
 
 - Open the Vercel dashboard and sign in with an invited account.

@@ -29,6 +29,18 @@ jobs:
           npx esbuild api/agents/status.ts --platform=node --format=esm --outfile=/tmp/agents-status.mjs
           npx esbuild api/agents/run-step.ts --platform=node --format=esm --outfile=/tmp/agents-run-step.mjs
 
+  theia-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Check Theia package and cloud-architecture boundaries
+        run: |
+          node --check apps/theia/scripts/validate-config.mjs
+          node apps/theia/scripts/validate-config.mjs
+
   native:
     runs-on: ubuntu-latest
     steps:

@@ -1,10 +1,10 @@
 # CONTINUUM
 
-**A native local-first engineering IDE with cloud project intelligence.**
+**An engineering operating system built on a full IDE platform, with shared cloud intelligence.**
 
-CONTINUUM is a real desktop application—not a website inside an Electron wrapper. The Windows installer packages a native **PySide6/Qt desktop program**. It opens and edits files directly from folders on your PC. The editor, file explorer, new-file flow, local saves, and workspace selection work without internet.
+CONTINUUM is moving in stages from a hand-built PySide6 editor to a branded **Eclipse Theia** desktop IDE. The Theia candidate in `apps/theia` composes a mature workbench with editor, file explorer, terminal, tasks, debugging, search and extension-host capabilities; its first-party extension adds CONTINUUM commands. The existing PySide6 desktop in `apps/native` remains available while the new installer is built and tested. See [the migration plan](docs/theia-migration.md).
 
-Cloud features are a separate layer: hosted Supabase provides sign-in, shared projects, tasks, agent sessions, permissions, and conversation history. Vercel serverless functions orchestrate cloud AI agents and route requests across configured providers. AI provider credentials remain in Vercel environment variables, never on the user's machine.
+Cloud functionality remains separate and unchanged: Supabase provides authentication, shared projects, tasks, agent sessions, permissions and conversation history. Vercel serverless functions orchestrate cloud agents and provider failover. AI-provider credentials stay in Vercel and are never shipped with the desktop.
 
 ## What works in the native app
 
@@ -22,7 +22,7 @@ Cloud features are a separate layer: hosted Supabase provides sign-in, shared pr
 
 ## Architecture
 
-- **Native desktop:** apps/native — PySide6 GUI, local workspace, safe file handling, packaged Windows installer.
+- **Desktop migration:** apps/theia — Eclipse Theia-based candidate desktop IDE; apps/native — current PySide6 desktop retained during validation.
 - **Cloud dashboard:** apps/web — React + TypeScript + Vite; deploy to Vercel with root directory apps/web.
 - **Cloud agent APIs:** apps/web/api/agents — authenticated Vercel functions; provider keys live only in Vercel.
 - **Shared database:** hosted Supabase Auth, PostgreSQL, RLS, and Realtime. SQL migrations are in supabase/migrations.
@@ -59,11 +59,11 @@ The native installer does not ask users for Supabase or AI credentials. Before g
 
 The installer build embeds only these public connection settings. AI-provider keys stay in Vercel and are not distributed. Since the Supabase client key is public, Row Level Security is mandatory.
 
-## Build the native Windows installer
+## Desktop IDE migration
 
-Open the **Build native desktop installer** workflow in GitHub Actions and select **Run workflow**. The workflow installs Python dependencies and Inno Setup, runs the native workspace tests, packages CONTINUUM, and publishes CONTINUUM-Setup-0.2.0.exe as an Actions artifact. Download it from that successful workflow run.
+The Theia candidate is built separately from [`apps/theia`](apps/theia/README.md). On Windows, use Node.js 24 and Yarn Classic 1.22.22 and run `yarn package:win` from that directory, or use the **Build CONTINUUM Theia IDE (Windows)** workflow. The new installer is not the default release yet: retain the PySide6 installer until Theia's installer, local-workspace behavior and cloud integration have passed the migration smoke tests.
 
-The native installer workflow intentionally fails if the required GitHub Actions secrets are missing, rather than generating an installer that asks every user to manually enter keys.
+The existing **Build native desktop installer** workflow is still available for the current PySide6 application.
 
 ## Develop locally
 
@@ -117,6 +117,6 @@ python -m unittest discover -s tests -v
 - Model changes are proposals; the user chooses when to apply them. Existing local files are backed up before applying.
 - Git commit, push, deployment, destructive operations, and unrestricted shell execution are not automatic.
 
-## License
+## License and third-party components
 
-Use is restricted by the proprietary terms in LICENSE. No open-source license is granted.
+CONTINUUM-owned source, designs, documentation and other proprietary materials are governed by the root `LICENSE`. The Theia desktop bundles separately licensed third-party packages; those licenses and notice obligations are not overridden by the root license. See [Theia third-party notices](apps/theia/THIRD_PARTY_NOTICES.md) and [the migration plan](docs/theia-migration.md). Review the exact dependency inventory before distributing a binary.

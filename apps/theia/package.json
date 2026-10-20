@@ -1,0 +1,140 @@
+{
+  "name": "@continuum/theia-app",
+  "version": "0.4.0",
+  "private": true,
+  "description": "CONTINUUM Engineering OS desktop IDE built on Eclipse Theia",
+  "productName": "CONTINUUM",
+  "license": "UNLICENSED",
+  "packageManager": "yarn@1.22.22",
+  "engines": {
+    "node": ">=24",
+    "yarn": "1.22.22"
+  },
+  "main": "lib/backend/electron-main.js",
+  "workspaces": [
+    "extensions/continuum"
+  ],
+  "theia": {
+    "target": "electron",
+    "frontend": {
+      "config": {
+        "applicationName": "CONTINUUM",
+        "reloadOnReconnect": true,
+        "preferences": {
+          "editor.tabSize": 4,
+          "editor.insertSpaces": true,
+          "editor.wordWrap": "off",
+          "files.enableTrash": true,
+          "security.workspace.trust.enabled": true
+        },
+        "electron": {
+          "appUserModelId": "tech.dmjgroup.continuum",
+          "showWindowEarly": false,
+          "splashScreenOptions": {
+            "content": "resources/continuum-splash.svg",
+            "height": 150,
+            "width": 440
+          }
+        }
+      }
+    },
+    "backend": {
+      "config": {
+        "frontendConnectionTimeout": -1,
+        "startupTimeout": -1,
+        "resolveSystemPlugins": false,
+        "configurationFolder": ".continuum"
+      }
+    }
+  },
+  "dependencies": {
+    "@continuum/ide-extension": "1.0.0",
+    "@theia/callhierarchy": "1.76.0",
+    "@theia/console": "1.76.0",
+    "@theia/core": "1.76.0",
+    "@theia/debug": "1.76.0",
+    "@theia/electron": "1.76.0",
+    "@theia/editor": "1.76.0",
+    "@theia/editor-preview": "1.76.0",
+    "@theia/external-api": "1.76.0",
+    "@theia/external-terminal": "1.76.0",
+    "@theia/file-search": "1.76.0",
+    "@theia/filesystem": "1.76.0",
+    "@theia/getting-started": "1.76.0",
+    "@theia/keymaps": "1.76.0",
+    "@theia/markers": "1.76.0",
+    "@theia/mini-browser": "1.76.0",
+    "@theia/monaco": "1.76.0",
+    "@theia/navigator": "1.76.0",
+    "@theia/outline-view": "1.76.0",
+    "@theia/output": "1.76.0",
+    "@theia/plugin-ext": "1.76.0",
+    "@theia/plugin-ext-vscode": "1.76.0",
+    "@theia/preferences": "1.76.0",
+    "@theia/process": "1.76.0",
+    "@theia/scm": "1.76.0",
+    "@theia/scm-extra": "1.76.0",
+    "@theia/search-in-workspace": "1.76.0",
+    "@theia/secondary-window": "1.76.0",
+    "@theia/task": "1.76.0",
+    "@theia/terminal": "1.76.0",
+    "@theia/terminal-manager": "1.76.0",
+    "@theia/timeline": "1.76.0",
+    "@theia/toolbar": "1.76.0",
+    "@theia/typehierarchy": "1.76.0",
+    "@theia/userstorage": "1.76.0",
+    "@theia/variable-resolver": "1.76.0",
+    "@theia/vsx-registry": "1.76.0",
+    "@theia/workspace": "1.76.0"
+  },
+  "devDependencies": {
+    "@theia/cli": "1.76.0",
+    "electron": "42.8.1",
+    "electron-builder": "26.15.3"
+  },
+  "scripts": {
+    "validate:config": "node scripts/validate-config.mjs",
+    "build:extension": "yarn workspace @continuum/ide-extension build",
+    "rebuild": "theia rebuild:electron --cacheRoot ../..",
+    "build": "yarn build:extension && yarn rebuild && theia build --mode production",
+    "start": "theia start --plugins=local-dir:../../plugins --log-level=info",
+    "package:win": "yarn build && electron-builder --win nsis --x64 --publish never"
+  },
+  "theiaPlugins": {
+    "vscode-builtin-extensions": "https://github.com/eclipse-theia/vscode-builtin-extensions/releases/download/1.108.2/vscode-builtin-extensions-1.108.2.tar.gz"
+  },
+  "build": {
+    "appId": "tech.dmjgroup.continuum",
+    "productName": "CONTINUUM",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "lib/**/*",
+      "src-gen/**/*",
+      "resources/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}
