@@ -11,7 +11,8 @@
     }
   ],
   "dependencies": {
-    "@theia/core": "1.76.0"
+    "@theia/core": "1.76.0",
+    "@supabase/supabase-js": "^2.58.0"
   },
   "devDependencies": {
     "@theia/ext-scripts": "1.76.0"
