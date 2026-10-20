@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="300" viewBox="0 0 880 300" role="img" aria-label="CONTINUUM Engineering OS">
+  <rect width="880" height="300" rx="18" fill="#252720"/>
+  <circle cx="94" cy="100" r="35" fill="#dc593b"/>
+  <path d="M80 100h28M94 86v28" stroke="#fff8ed" stroke-width="6" stroke-linecap="round"/>
+  <text x="150" y="109" fill="#f6f1e7" font-family="Arial, sans-serif" font-size="30" font-weight="700" letter-spacing="5">CONTINUUM</text>
+  <text x="80" y="190" fill="#f6f1e7" font-family="Arial, sans-serif" font-size="34" font-weight="600">ENGINEERING OS</text>
+  <text x="80" y="232" fill="#d7cfc0" font-family="Arial, sans-serif" font-size="18">Build locally. Coordinate together.</text>
+  <rect x="80" y="260" width="90" height="5" rx="2.5" fill="#dc593b"/>
+  <rect x="178" y="260" width="42" height="5" rx="2.5" fill="#777c61"/>
+  <rect x="228" y="260" width="20" height="5" rx="2.5" fill="#777c61"/>
+</svg>
