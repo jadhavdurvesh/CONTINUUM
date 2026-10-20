@@ -47,3 +47,9 @@ apps/native/build/
 apps/native/dist/
 apps/native/release/
 apps/native/continuum/_release_cloud_config.py
+
+# Eclipse Theia desktop build outputs
+apps/theia/lib/
+apps/theia/src-gen/
+apps/theia/release/
+apps/theia/.theia/
