@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-10-19
 
-This document records public open-source IDE/editor patterns used to guide the native CONTINUUM workbench. It is a feature benchmark and roadmap, not a claim that CONTINUUM already implements every listed capability. The implementations in those projects are not copied into CONTINUUM; the references are used to prioritize familiar interactions.
+This document records public open-source IDE/editor patterns that informed CONTINUUM's workbench. It is a feature benchmark and roadmap, not a claim that CONTINUUM already implements every listed capability. CONTINUUM now has a staged Eclipse Theia application candidate in `apps/theia`: Theia is consumed as a pinned set of upstream packages, not copied source. The older native PySide6 implementation remains in `apps/native` until the Theia package passes build and smoke tests.
 
 ## References
 
@@ -17,7 +17,7 @@ This document records public open-source IDE/editor patterns used to guide the n
 
 ## Current CONTINUUM constraints
 
-CONTINUUM is a native PySide6 / Qt application. The local editor must stay usable without a network connection. Supabase-backed shared projects and Vercel-hosted AI agents are optional cloud features. The application sends source context only when an explicit cloud-agent action asks it to; proposals must be reviewed before applying to local files.
+The current PySide6 / Qt editor and the candidate Eclipse Theia desktop are both retained during the staged migration. Local editing should remain usable without a network connection. Supabase-backed shared projects and Vercel-hosted AI agents remain cloud features. The first Theia stage opens the existing dashboard; an embedded authenticated agent view is not considered implemented until it reuses the Supabase session and Vercel APIs end-to-end. Any agent-generated proposals must be reviewed before applying to local files.
 
 CONTINUUM is not a VS Code extension host or a language-server implementation. Features like IntelliSense, semantic navigation, debugging, and plugin marketplaces require additional integrations and should be labeled unavailable until they work end-to-end.
 
