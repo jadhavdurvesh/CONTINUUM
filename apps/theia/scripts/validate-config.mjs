@@ -67,6 +67,10 @@ assert.match(cloudWidget, /MAX_CONTEXT_CHARS/, "Context sent to the agent must b
 assert.match(cloudWidget, /service_role/, "Cloud panel must reject service-role credentials");
 assert.match(cloudWidget, /sb_secret_/, "Cloud panel must reject modern Supabase secret keys");
 assert.match(cloudWidget, /subscribeProjectChanges/, "Cloud panel must subscribe to project-scoped live changes");
+assert.match(cloudWidget, /private realtimeStatus:/, "Cloud panel must track its live-sync state");
+assert.match(cloudWidget, /channel\.subscribe\(\(status, error\)/, "Cloud panel must handle Realtime subscription status transitions");
+assert.match(cloudWidget, /Reconnect live sync/, "Cloud panel must expose a reconnect action");
+assert.match(cloudWidget, /Supabase Realtime reported/, "Cloud panel must display subscription failures");
 assert.match(cloudWidget, /table: 'agent_sessions'/, "Agent session changes must refresh through Supabase Realtime");
 assert.match(cloudWidget, /table: 'agent_messages'/, "Shared conversation changes must refresh through Supabase Realtime");
 assert.match(cloudWidget, /clearRealtime\(\)/, "Realtime channels must be cleaned up during widget lifecycle transitions");
