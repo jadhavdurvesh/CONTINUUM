@@ -314,12 +314,17 @@ export class ContinuumCloudWidget extends ReactWidget {
   private async runStep(): Promise<void> {
     const client = this.client;
     const token = this.session?.access_token;
-    const selected = this.sessions.find(s => s.id === this.sessionId);
-    if (!client || !token || !selected || selected.status !== 'queued') return;
+    const projectId = this.projectId;
+    const selectedSessionId = this.sessionId;
+    const selected = this.sessions.find(s => s.id === selectedSessionId);
+    if (!client || !token || !projectId || !selected || selected.status !== 'queued') return;
     this.busy = true; this.error = ''; this.notice = ''; this.update();
     try {
-      const { data, error } = await client.from('code_files').select('path,content').eq('project_id', this.projectId).order('path').limit(500);
+      const { data, error } = await client.from('code_files').select('path,content').eq('project_id', projectId).order('path').limit(500);
       if (error) throw error;
+      if (client !== this.client || projectId !== this.projectId) {
+        throw new Error('The selected project changed while preparing agent context. Select the session again and retry.');
+      }
       const focus = new Set(selected.focus_paths || []);
       const candidates = ((data ?? []) as { path: string; content: string }[]).filter(f => !focus.size || focus.has(f.path)).slice(0, MAX_FILES);
       const context: { path: string; content: string }[] = [];
@@ -332,14 +337,18 @@ export class ContinuumCloudWidget extends ReactWidget {
       const response = await fetch(AGENT_API + '/api/agents/run-step', {
         method: 'POST', credentials: 'omit',
         headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: this.projectId, session_id: selected.id, workspace_context: context })
+        body: JSON.stringify({ project_id: projectId, session_id: selected.id, workspace_context: context })
       });
       const result = await response.json().catch(() => ({})) as { error?: string; provider?: string; attempts?: number };
       if (!response.ok) throw new Error(result.error || 'Agent request failed with HTTP ' + response.status + '.');
+      if (client !== this.client) return;
+      if (projectId !== this.projectId) {
+        this.notice = 'Agent step completed for the previous project. Reopen that project to review its shared result.';
+        return;
+      }
       this.notice = 'Agent step completed via ' + (result.provider || 'Vercel') + ((result.attempts || 1) > 1 ? ' with provider fallback.' : '.');
       await this.refreshSessions();
-      this.sessionId = selected.id;
-      await this.refreshMessages();
+      if (selectedSessionId === this.sessionId) await this.refreshMessages();
     } catch (e) {
       this.error = e instanceof Error ? e.message : 'Agent run failed.';
       try { await this.refreshSessions(); } catch { /* Preserve the primary error. */ }
