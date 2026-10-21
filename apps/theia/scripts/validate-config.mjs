@@ -64,6 +64,11 @@ const contribution = readFileSync(join(appRoot, "extensions/continuum/src/browse
 assert.match(cloudModule, /WidgetFactory/, "Cloud panel must be registered as a Theia widget");
 assert.match(cloudModule, /ContinuumCloudWidget\.ID/, "Cloud widget must have a stable factory ID");
 assert.match(contribution, /continuum\.openCloudPanel/, "Theia must provide a command to open the cloud panel");
+assert.match(contribution, /this\.openerService\.getOpener\(uri\)/, "External dashboard must resolve a registered Theia opener");
+assert.doesNotMatch(contribution, /this\.openerService\.open\(/, "OpenerService does not expose a direct open method");
+assert.match(cloudWidget, /import React from '@theia\/core\/shared\/react'/, "React shared module must use the default import expected by TypeScript");
+assert.match(cloudWidget, /private continuumDisposed = false/, "Widget disposal guard must not shadow Theia's disposed signal");
+assert.doesNotMatch(cloudWidget, /private disposed = false/, "Widget must not shadow the inherited disposed signal");
 assert.match(cloudWidget, /agent_sessions/, "Cloud panel must use durable Supabase sessions");
 assert.match(cloudWidget, /agent_messages/, "Cloud panel must show shared agent history");
 assert.match(cloudWidget, /api\/agents\/run-step/, "Cloud panel must invoke the existing Vercel endpoint");
