@@ -66,5 +66,10 @@ assert.match(cloudWidget, /api\/agents\/run-step/, "Cloud panel must invoke the 
 assert.match(cloudWidget, /MAX_CONTEXT_CHARS/, "Context sent to the agent must be bounded");
 assert.match(cloudWidget, /service_role/, "Cloud panel must reject service-role credentials");
 assert.match(cloudWidget, /sb_secret_/, "Cloud panel must reject modern Supabase secret keys");
+assert.match(cloudWidget, /subscribeProjectChanges/, "Cloud panel must subscribe to project-scoped live changes");
+assert.match(cloudWidget, /table: 'agent_sessions'/, "Agent session changes must refresh through Supabase Realtime");
+assert.match(cloudWidget, /table: 'agent_messages'/, "Shared conversation changes must refresh through Supabase Realtime");
+assert.match(cloudWidget, /clearRealtime\(\)/, "Realtime channels must be cleaned up during widget lifecycle transitions");
+assert.match(cloudWidget, /selected project changed while preparing agent context/, "Agent execution must stay bound to the selected project");
 assert.match(readFileSync(join(repo, "apps/web/api/agents/cors.ts"), "utf8"), /Access-Control-Allow-Origin/, "Cloud API must restrict cross-origin access");
 console.log(`CONTINUUM Theia config validated: ${theiaVersions.length} Theia packages pinned to 1.76.0; shared Supabase/Vercel services retained.`);
