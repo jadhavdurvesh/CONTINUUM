@@ -55,7 +55,9 @@ export class ContinuumCommandContribution implements CommandContribution, MenuCo
     registry.registerCommand(OpenCloudWorkspaceCommand, {
       execute: async () => {
         try {
-          await this.openerService.open(new URI(CLOUD_WORKSPACE_URL));
+          const uri = new URI(CLOUD_WORKSPACE_URL);
+          const opener = await this.openerService.getOpener(uri);
+          await opener.open(uri);
         } catch {
           this.messageService.error(
             'Could not open the CONTINUUM cloud dashboard. Check your network connection and deployment URL.'
