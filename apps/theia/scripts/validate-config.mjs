@@ -62,7 +62,7 @@ assert.match(cloudModule, /ContinuumCloudWidget\.ID/, "Cloud widget must have a 
 assert.match(contribution, /continuum\.openCloudPanel/, "Theia must provide a command to open the cloud panel");
 assert.match(cloudWidget, /agent_sessions/, "Cloud panel must use durable Supabase sessions");
 assert.match(cloudWidget, /agent_messages/, "Cloud panel must show shared agent history");
-assert.match(cloudWidget, /api\\/agents\\/run-step/, "Cloud panel must invoke the existing Vercel endpoint");
+assert.match(cloudWidget, /api\/agents\/run-step/, "Cloud panel must invoke the existing Vercel endpoint");
 assert.match(cloudWidget, /MAX_CONTEXT_CHARS/, "Context sent to the agent must be bounded");
 assert.match(cloudWidget, /service_role/, "Cloud panel must reject service-role credentials");
 assert.match(readFileSync(join(repo, "apps/web/api/agents/cors.ts"), "utf8"), /Access-Control-Allow-Origin/, "Cloud API must restrict cross-origin access");
