@@ -24,11 +24,15 @@ for (const [name, version] of theiaVersions) {
   assert.equal(version, "1.76.0", `${name} must be pinned to the same Theia release`);
 }
 assert.equal(extension.dependencies?.["@theia/core"], "1.76.0", "Extension API must match the app Theia release");
+assert.ok(extension.dependencies?.["@supabase/supabase-js"], "Cloud panel must use the established Supabase JS client");
 assert.equal(extension.theiaExtensions?.[0]?.frontend, "lib/browser/continuum-frontend-module", "Custom frontend module must be included");
 
 const requiredPaths = [
   "apps/theia/extensions/continuum/src/browser/continuum-contribution.ts",
   "apps/theia/extensions/continuum/src/browser/continuum-frontend-module.ts",
+  "apps/theia/extensions/continuum/src/browser/continuum-cloud-widget.ts",
+  "apps/web/api/agents/cors.ts",
+  "apps/web/scripts/test-agent-cors.ts",
   "apps/theia/resources/continuum-splash.svg",
   "apps/web/api/agents/status.ts",
   "apps/web/api/agents/run-step.ts",
@@ -50,4 +54,16 @@ assert.doesNotMatch(
   "The desktop extension must not embed server credentials"
 );
 
-console.log(`CONTINUUM Theia config validated: ${theiaVersions.length} Theia packages pinned to 1.76.0; existing Supabase/Vercel/native services retained.`);
+const cloudWidget = readFileSync(join(appRoot, "extensions/continuum/src/browser/continuum-cloud-widget.ts"), "utf8");
+const cloudModule = readFileSync(join(appRoot, "extensions/continuum/src/browser/continuum-frontend-module.ts"), "utf8");
+const contribution = readFileSync(join(appRoot, "extensions/continuum/src/browser/continuum-contribution.ts"), "utf8");
+assert.match(cloudModule, /WidgetFactory/, "Cloud panel must be registered as a Theia widget");
+assert.match(cloudModule, /ContinuumCloudWidget\.ID/, "Cloud widget must have a stable factory ID");
+assert.match(contribution, /continuum\.openCloudPanel/, "Theia must provide a command to open the cloud panel");
+assert.match(cloudWidget, /agent_sessions/, "Cloud panel must use durable Supabase sessions");
+assert.match(cloudWidget, /agent_messages/, "Cloud panel must show shared agent history");
+assert.match(cloudWidget, /api\\/agents\\/run-step/, "Cloud panel must invoke the existing Vercel endpoint");
+assert.match(cloudWidget, /MAX_CONTEXT_CHARS/, "Context sent to the agent must be bounded");
+assert.match(cloudWidget, /service_role/, "Cloud panel must reject service-role credentials");
+assert.match(readFileSync(join(repo, "apps/web/api/agents/cors.ts"), "utf8"), /Access-Control-Allow-Origin/, "Cloud API must restrict cross-origin access");
+console.log(`CONTINUUM Theia config validated: ${theiaVersions.length} Theia packages pinned to 1.76.0; shared Supabase/Vercel services retained.`);
