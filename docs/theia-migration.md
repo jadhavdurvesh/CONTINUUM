@@ -24,17 +24,19 @@ Eclipse Theia is a modular IDE platform designed to be adopted and branded into 
 - Do **not** replace the existing PySide6 installer until the Theia installer and local workspace are smoke-tested on Windows.
 - Do **not** alter the Vercel project, Vercel environment variables, Supabase schema, or production dashboard.
 
-### Stage 2 — authenticated in-IDE cloud panel
+### Stage 2 — authenticated in-IDE cloud panel (implementation in this branch)
 
-- Reuse the existing Supabase user identity/session model and the authenticated Vercel agent APIs.
-- Add project selection and an embedded agent-session view only after end-to-end auth, membership/RLS checks, session persistence, and proposal review tests pass.
-- All model calls continue through Vercel; no provider keys enter Theia settings, plugin storage or installer files.
+- Add a first-party Theia Cloud panel using the existing Supabase JS client and hosted project; the URL and public publishable/anon key are configured locally per desktop profile.
+- Use the existing Supabase login/session, project queries, RLS-protected agent sessions/messages and shared code-file context; bound context before sending it to the cloud agent endpoint.
+- Run one queued agent step through the existing authenticated Vercel `/api/agents/run-step` endpoint. Show shared conversation and proposal summaries; proposal application still requires the existing explicit review flow.
+- Add restricted cross-origin handling for the existing dashboard and loopback desktop origins so the Electron renderer can call the authenticated Vercel endpoint without exposing provider credentials.
+- This implementation remains a candidate until dependency compilation, sign-in, membership/RLS, CORS preflight and end-to-end session smoke tests pass. No provider/service-role key is placed in Theia settings or the installer.
 
 ### Stage 3 — migration and release cutover
 
 - Package and smoke-test Windows x64 and then other supported platforms.
 - Test workspace open/save offline, file and terminal operations, restart/reopen, theming, and plugin trust.
-- Test sign-in, project membership, durable sessions, agent API calls, and review-before-apply against the existing Supabase/Vercel production stack.
+- Test sign-in, project membership, durable sessions, agent API calls, CORS preflight from the desktop renderer, and review-before-apply against the existing Supabase/Vercel stack.
 - Add build/installer SBOM and third-party notices and verify license obligations.
 - Only then change the default desktop installer to Theia and retire redundant PySide6 editor UI.
 
