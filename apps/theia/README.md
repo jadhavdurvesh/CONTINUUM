@@ -40,6 +40,7 @@ The installer is written to `apps/theia/release/`. GitHub Actions can build and 
 - **CONTINUUM → Open Cloud Dashboard** remains available as a link to the existing deployed dashboard.
 - The panel saves only the Supabase project URL and public publishable/anon client key in local desktop storage. Supabase owns authentication and RLS; provider keys remain server-side on Vercel.
 - Agent context is bounded before sending. Proposed changes are displayed for review; the panel does not silently write proposals into local folders.
+- The Cloud panel displays its Supabase Realtime connection state and provides a reconnect control if the subscription fails or times out. Manual project/session refresh remains available when live sync is disconnected.
 
 ## Branding and trust
 

@@ -39,6 +39,8 @@ export class ContinuumCloudWidget extends ReactWidget {
   private client: SupabaseClient | null = null;
   private realtimeChannel: ReturnType<SupabaseClient['channel']> | null = null;
   private realtimeProjectId = '';
+  private realtimeStatus: 'disconnected' | 'connecting' | 'connected' | 'error' = 'disconnected';
+  private realtimeError = '';
   private authSubscription: { unsubscribe: () => void } | undefined;
   private projects: Project[] = [];
   private projectId = '';
@@ -87,19 +89,24 @@ export class ContinuumCloudWidget extends ReactWidget {
     const client = this.client;
     this.realtimeChannel = null;
     this.realtimeProjectId = '';
+    this.realtimeStatus = 'disconnected';
+    this.realtimeError = '';
     if (channel && client) void client.removeChannel(channel);
   }
 
   private subscribeProjectChanges(): void {
     const client = this.client;
     const projectId = this.projectId;
-    if (this.realtimeChannel && this.realtimeProjectId === projectId) return;
+    if (this.realtimeChannel && this.realtimeProjectId === projectId
+        && this.realtimeStatus !== 'error' && this.realtimeStatus !== 'disconnected') return;
     this.clearRealtime();
-    if (!client || !projectId) return;
+    if (!client || !projectId || !this.session) return;
 
     const filter = 'project_id=eq.' + projectId;
     this.realtimeProjectId = projectId;
-    this.realtimeChannel = client.channel('theia-cloud-' + projectId)
+    this.realtimeStatus = 'connecting';
+    this.realtimeError = '';
+    const channel = client.channel('theia-cloud-' + projectId)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_sessions', filter }, () => {
         if (this.disposed || client !== this.client || projectId !== this.projectId) return;
         void this.refreshSessions().catch(error => {
@@ -115,8 +122,23 @@ export class ContinuumCloudWidget extends ReactWidget {
           this.error = error instanceof Error ? error.message : 'Could not refresh the shared conversation.';
           this.update();
         });
-      })
-      .subscribe();
+      });
+    this.realtimeChannel = channel;
+    channel.subscribe((status, error) => {
+      if (this.disposed || client !== this.client || projectId !== this.projectId || this.realtimeChannel !== channel) return;
+      if (status === 'SUBSCRIBED') {
+        this.realtimeStatus = 'connected';
+        this.realtimeError = '';
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        this.realtimeStatus = 'error';
+        this.realtimeError = error?.message || ('Supabase Realtime reported ' + status + '.');
+        this.realtimeChannel = null;
+        this.realtimeProjectId = '';
+        void client.removeChannel(channel);
+      }
+      this.update();
+    });
+    this.update();
   }
 
   private initializeClient(): void {
@@ -443,6 +465,8 @@ export class ContinuumCloudWidget extends ReactWidget {
           )
         ),
         h('div', { style: textStyle }, this.projects.length + ' accessible project(s) · access governed by Supabase RLS.'),
+        h('div', { style: textStyle }, 'Live sync: ' + this.realtimeStatus + (this.realtimeError ? ' — ' + this.realtimeError : '')),
+        this.button('Reconnect live sync', () => this.subscribeProjectChanges(), !this.projectId || !this.session),
         this.button('Refresh projects / sessions', () => void this.refreshProjects(), !this.projectId),
         this.button('Sign out', () => void this.signOut())
       ),
