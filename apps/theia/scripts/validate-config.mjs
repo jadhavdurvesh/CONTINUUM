@@ -17,6 +17,7 @@ assert.equal(app.build?.appId, "tech.dmjgroup.continuum", "Installer app ID must
 assert.equal(app.dependencies?.["@continuum/ide-extension"], extension.version, "Local extension version must match app dependency");
 assert.ok(app.workspaces?.includes("extensions/continuum"), "The custom extension must be in the Yarn workspace");
 assert.ok(app.dependencies?.["@theia/electron"], "Theia Electron target package must be a runtime dependency");
+assert.ok(!app.dependencies?.["@theia/scm-extra"], "Deprecated private Theia SCM extra package must not be installed from npm");
 
 const theiaVersions = Object.entries(app.dependencies ?? {}).filter(([name]) => name.startsWith("@theia/"));
 assert.ok(theiaVersions.length >= 25, "Expected a full workbench package set");
@@ -25,6 +26,9 @@ for (const [name, version] of theiaVersions) {
 }
 assert.equal(extension.dependencies?.["@theia/core"], "1.76.0", "Extension API must match the app Theia release");
 assert.ok(extension.dependencies?.["@supabase/supabase-js"], "Cloud panel must use the established Supabase JS client");
+assert.ok(!extension.devDependencies?.["@theia/ext-scripts"], "Do not install Theia private development tooling from the public npm registry");
+assert.equal(extension.scripts?.build, "tsc -p tsconfig.json", "Local extension must compile with the public TypeScript compiler");
+assert.equal(app.devDependencies?.typescript, "~5.9.3", "TypeScript compiler must be pinned to the version used by Theia 1.76");
 assert.equal(extension.theiaExtensions?.[0]?.frontend, "lib/browser/continuum-frontend-module", "Custom frontend module must be included");
 
 const requiredPaths = [

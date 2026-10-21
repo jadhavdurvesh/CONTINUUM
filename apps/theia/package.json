@@ -73,7 +73,6 @@
     "@theia/preferences": "1.76.0",
     "@theia/process": "1.76.0",
     "@theia/scm": "1.76.0",
-    "@theia/scm-extra": "1.76.0",
     "@theia/search-in-workspace": "1.76.0",
     "@theia/secondary-window": "1.76.0",
     "@theia/task": "1.76.0",
@@ -90,7 +89,8 @@
   "devDependencies": {
     "@theia/cli": "1.76.0",
     "electron": "42.8.1",
-    "electron-builder": "26.15.3"
+    "electron-builder": "26.15.3",
+    "typescript": "~5.9.3"
   },
   "scripts": {
     "validate:config": "node scripts/validate-config.mjs",
