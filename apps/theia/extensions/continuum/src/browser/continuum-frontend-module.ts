@@ -5,7 +5,7 @@ import { ContinuumCommandContribution } from './continuum-contribution';
 import { ContinuumCloudWidget } from './continuum-cloud-widget';
 
 export default new ContainerModule(bind => {
-  bind(ContinuumCloudWidget).toSelf().inSingletonScope();
+  bind(ContinuumCloudWidget).toSelf();
   bind(WidgetFactory).toDynamicValue(ctx => ({
     id: ContinuumCloudWidget.ID,
     createWidget: () => ctx.container.get<ContinuumCloudWidget>(ContinuumCloudWidget)

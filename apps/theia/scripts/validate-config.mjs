@@ -65,5 +65,6 @@ assert.match(cloudWidget, /agent_messages/, "Cloud panel must show shared agent 
 assert.match(cloudWidget, /api\/agents\/run-step/, "Cloud panel must invoke the existing Vercel endpoint");
 assert.match(cloudWidget, /MAX_CONTEXT_CHARS/, "Context sent to the agent must be bounded");
 assert.match(cloudWidget, /service_role/, "Cloud panel must reject service-role credentials");
+assert.match(cloudWidget, /sb_secret_/, "Cloud panel must reject modern Supabase secret keys");
 assert.match(readFileSync(join(repo, "apps/web/api/agents/cors.ts"), "utf8"), /Access-Control-Allow-Origin/, "Cloud API must restrict cross-origin access");
 console.log(`CONTINUUM Theia config validated: ${theiaVersions.length} Theia packages pinned to 1.76.0; shared Supabase/Vercel services retained.`);

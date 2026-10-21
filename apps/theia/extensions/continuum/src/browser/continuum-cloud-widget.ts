@@ -75,11 +75,13 @@ export class ContinuumCloudWidget extends ReactWidget {
   override dispose(): void {
     this.disposed = true;
     this.authSubscription?.unsubscribe();
+    if (this.client) void this.client.auth.stopAutoRefresh();
     super.dispose();
   }
 
   private initializeClient(): void {
     this.authSubscription?.unsubscribe();
+    if (this.client) void this.client.auth.stopAutoRefresh();
     const url = this.configUrl.trim().replace(/\/+$/, '');
     const key = this.publishableKey.trim();
     if (!url || !key) { this.client = null; this.session = null; this.update(); return; }
@@ -116,7 +118,7 @@ export class ContinuumCloudWidget extends ReactWidget {
       if (parsed.protocol !== 'https:' && !local) throw new Error('Use an HTTPS Supabase URL.');
       if (!parsed.hostname.endsWith('.supabase.co') && !local) throw new Error('Enter the Supabase project URL, not a dashboard URL.');
       if (!key) throw new Error('Enter the public publishable/anon key.');
-      if (/service.role/i.test(key)) throw new Error('Service-role keys are prohibited in the desktop.');
+      if (/^sb_secret_/i.test(key) || /service.role/i.test(key)) throw new Error('Supabase secret/service-role keys are prohibited in the desktop.');
       const payload = key.split('.')[1];
       if (payload) {
         try {
@@ -300,7 +302,9 @@ export class ContinuumCloudWidget extends ReactWidget {
       this.button('Save settings', () => void this.saveConfig(), !this.configUrl.trim() || !this.publishableKey.trim(), true),
       this.button('Reset settings', () => {
         window.localStorage.removeItem(CONFIG_KEY); window.localStorage.removeItem(AUTH_STORAGE_KEY);
-        this.authSubscription?.unsubscribe(); this.client = null; this.session = null;
+        this.authSubscription?.unsubscribe();
+        if (this.client) void this.client.auth.stopAutoRefresh();
+        this.client = null; this.session = null;
         this.configUrl = ''; this.publishableKey = ''; this.projects = []; this.sessions = []; this.messages = [];
         this.projectId = ''; this.sessionId = ''; this.error = ''; this.notice = ''; this.update();
       })
