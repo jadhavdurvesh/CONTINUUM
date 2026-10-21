@@ -1,12 +1,12 @@
 # CONTINUUM IDE — Eclipse Theia foundation
 
-This folder is the staged replacement candidate for the hand-built editor. It is an application built **on Eclipse Theia**, not an iframe or a separate website: Theia provides the workbench, editor, file explorer, terminal, task runner, debugger, extension host and theming foundation.
+This folder is the staged replacement candidate for the hand-built editor. It is an application built **on Eclipse Theia**, not an iframe or separate website. Theia provides the workbench, editor, file explorer, terminal, task runner, debugger, extension host and theming foundation. The first-party CONTINUUM extension adds an authenticated Cloud panel while preserving the existing dashboard.
 
 ## Requirements
 
 - Windows 10/11 x64 for the installer build.
 - Node.js 24.x and Yarn Classic 1.22.22.
-- Internet during dependency install and first build. The installed local workbench is intended to edit local folders without calling the cloud.
+- Internet during dependency installation and the first build. The installed local workbench is intended to edit local folders without calling the cloud.
 
 ## Run in development
 
@@ -20,7 +20,7 @@ yarn build
 yarn start
 ```
 
-The build compiles the CONTINUUM Theia extension, rebuilds Electron native dependencies, and bundles the Theia workbench. Run `yarn validate:config` for offline structural checks.
+The build compiles the CONTINUUM Theia extension, rebuilds Electron native dependencies and bundles the Theia workbench. Run `yarn validate:config` for offline structural checks.
 
 ## Build the Windows installer
 
@@ -28,16 +28,18 @@ The build compiles the CONTINUUM Theia extension, rebuilds Electron native depen
 yarn package:win
 ```
 
-The installer is written to `apps/theia/release/`. GitHub Actions can build and upload this artifact with the **Build CONTINUUM Theia IDE (Windows)** workflow. This is a separate release lane; the existing PySide6 installer is deliberately retained until Theia passes real Windows smoke tests.
+The installer is written to `apps/theia/release/`. GitHub Actions can build and upload it with the **Build CONTINUUM Theia IDE (Windows)** workflow. This is a separate release lane; retain the existing PySide6 installer until Theia passes automated builds and real Windows smoke tests.
 
 ## CONTINUUM integration boundary
 
 - Theia owns local files, editor tabs, language tooling, terminal and local developer tasks.
 - The existing React dashboard in `apps/web` remains deployed from the Vercel project root `apps/web`.
-- Supabase continues to own Auth, shared projects, tasks, agent sessions/messages, RLS, and Realtime.
+- Supabase continues to own Auth, shared projects, tasks, agent sessions/messages, RLS and Realtime.
 - `apps/web/api/agents` continues to orchestrate hosted model calls. OpenAI/Groq/OpenRouter credentials remain only in Vercel server environment variables.
-- The first extension stage adds a **CONTINUUM → Open Cloud Workspace** command that opens the current deployed dashboard. It does not duplicate authentication or put service/provider credentials in the IDE.
-- An embedded authenticated agent view and a shared project selector are a later integration stage; do not claim those views are built until they use the existing Supabase session and Vercel APIs end-to-end.
+- **CONTINUUM → Open Cloud Panel** opens the integrated view for Supabase sign-in, RLS-scoped project selection, durable agent sessions, shared conversation history and one-step Vercel agent runs.
+- **CONTINUUM → Open Cloud Dashboard** remains available as a link to the existing deployed dashboard.
+- The panel saves only the Supabase project URL and public publishable/anon client key in local desktop storage. Supabase owns authentication and RLS; provider keys remain server-side on Vercel.
+- Agent context is bounded before sending. Proposed changes are displayed for review; the panel does not silently write proposals into local folders.
 
 ## Branding and trust
 

@@ -2,7 +2,7 @@
 
 **An engineering operating system built on a full IDE platform, with shared cloud intelligence.**
 
-CONTINUUM is moving in stages from a hand-built PySide6 editor to a branded **Eclipse Theia** desktop IDE. The Theia candidate in `apps/theia` composes a mature workbench with editor, file explorer, terminal, tasks, debugging, search and extension-host capabilities; its first-party extension adds CONTINUUM commands. The existing PySide6 desktop in `apps/native` remains available while the new installer is built and tested. See [the migration plan](docs/theia-migration.md).
+CONTINUUM is moving in stages from a hand-built PySide6 editor to a branded **Eclipse Theia** desktop IDE. The Theia candidate in `apps/theia` composes a mature workbench with editor, file explorer, terminal, tasks, debugging, search and extension-host capabilities. Its first-party extension provides a CONTINUUM Cloud panel for Supabase sign-in, shared project selection, durable agent sessions and calls to the existing Vercel agent API. The existing PySide6 desktop in `apps/native` remains available while the new installer is built and tested. See [the migration plan](docs/theia-migration.md).
 
 Cloud functionality remains separate and unchanged: Supabase provides authentication, shared projects, tasks, agent sessions, permissions and conversation history. Vercel serverless functions orchestrate cloud agents and provider failover. AI-provider credentials stay in Vercel and are never shipped with the desktop.
 
@@ -61,7 +61,7 @@ The installer build embeds only these public connection settings. AI-provider ke
 
 ## Desktop IDE migration
 
-The Theia candidate is built separately from [`apps/theia`](apps/theia/README.md). On Windows, use Node.js 24 and Yarn Classic 1.22.22 and run `yarn package:win` from that directory, or use the **Build CONTINUUM Theia IDE (Windows)** workflow. The new installer is not the default release yet: retain the PySide6 installer until Theia's installer, local-workspace behavior and cloud integration have passed the migration smoke tests.
+The Theia candidate is built separately from [`apps/theia`](apps/theia/README.md). On Windows, use Node.js 24 and Yarn Classic 1.22.22 and run `yarn package:win` from that directory, or use the **Build CONTINUUM Theia IDE (Windows)** workflow. The new installer is not the default release yet: retain the PySide6 installer until Theia's installer, local-workspace behavior, desktop-to-cloud API access and cloud integration have passed the migration smoke tests.
 
 The existing **Build native desktop installer** workflow is still available for the current PySide6 application.
 
@@ -111,7 +111,7 @@ python -m unittest discover -s tests -v
 ## Security boundaries
 
 - Desktop embeds only a public Supabase publishable/anon key. It must not contain service-role keys or AI-provider credentials.
-- Provider credentials are stored as Vercel environment variables and read only by server-side agent functions.
+- Provider credentials are stored as Vercel environment variables and read only by server-side agent functions. The in-IDE panel saves only the public Supabase URL/key and Supabase-managed user session in the desktop profile.
 - Supabase row-level security enforces membership and protected cloud workspace writes.
 - Local workspace writes are restricted to the selected root. Secret files, credential files, binary files, traversal paths, symlink paths, and very large text files are blocked by the built-in editor.
 - Model changes are proposals; the user chooses when to apply them. Existing local files are backed up before applying.

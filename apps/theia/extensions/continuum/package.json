@@ -2,7 +2,7 @@
   "name": "@continuum/ide-extension",
   "version": "1.0.0",
   "private": true,
-  "description": "CONTINUUM-specific commands and cloud-workspace entry point for Eclipse Theia",
+  "description": "CONTINUUM-specific commands and authenticated cloud panel for Eclipse Theia",
   "license": "UNLICENSED",
   "main": "lib/browser/continuum-frontend-module.js",
   "theiaExtensions": [
@@ -11,7 +11,8 @@
     }
   ],
   "dependencies": {
-    "@theia/core": "1.76.0"
+    "@theia/core": "1.76.0",
+    "@supabase/supabase-js": "^2.58.0"
   },
   "devDependencies": {
     "@theia/ext-scripts": "1.76.0"
