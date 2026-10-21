@@ -1,4 +1,4 @@
-import { setAgentCors } from "./cors";
+import { setAgentCors } from "../_lib/cors";
 
 export default function handler(req: any, res: any) {
   if (!setAgentCors(req, res)) return res.status(403).json({ error: "Origin is not allowed." });

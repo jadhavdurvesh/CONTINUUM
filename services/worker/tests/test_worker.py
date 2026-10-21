@@ -118,3 +118,31 @@ def test_agent_payload_parser_accepts_fenced_json():
     data = parse_agent_payload(raw)
     assert data["summary"] == "hello"
     assert data["next_role"] == "coder"
+
+
+def test_pytest_arguments_are_allowlisted():
+    ok, _ = checked_command(["pytest", "-q", "tests/test_a.py::test_x"])
+    assert ok[0] == "pytest"
+    for args in (["--basetemp=/home/user"], ["--basetemp=.."], ["-p", "evil"], ["-c", "x.ini"], ["--rootdir=/"], ["-o", "addopts=x"],
+                 ["../outside.py"], ["/etc/passwd"], ["C:\\x.py"], ["--import-mode=importlib"]):
+        with pytest.raises(HTTPException):
+            checked_command(["pytest", *args])
+
+
+def test_agent_prompt_uses_real_newlines():
+    prompt = worker_module.build_agent_prompt(
+        {"goal": "do it", "current_agent": "coder"}, [{"role": "user", "content": "hi"}], "FILE: a\nx", ["a"])
+    assert "\\n" not in prompt
+    assert "\n\n" in prompt
+
+
+def test_automation_paths_are_detected():
+    for path in (".github/workflows/ci.yml", ".husky/pre-commit", ".vscode/tasks.json", "sub/.githooks/x", ".gitmodules"):
+        assert worker_module.is_automation_path(path)
+    assert not worker_module.is_automation_path("docs/github.md")
+
+
+def test_child_processes_do_not_inherit_worker_secrets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("CONTINUUM_WORKER_TOKEN", "super-secret-" + "x" * 40)
+    result = worker_module.run_process(["python3", "-c", "import os;print(os.environ.get('CONTINUUM_WORKER_TOKEN','absent'))"], tmp_path, 10)
+    assert result["output"].strip() == "absent"

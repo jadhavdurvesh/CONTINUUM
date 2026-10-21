@@ -50,10 +50,13 @@ function normalizeWorkerUrl(raw: string): string {
 }
 function savedConfig() {
   try {
+    // The worker token can run build/test commands on this PC, so keep it out of long-lived localStorage:
+    // only the URL persists; the token lives for the browser session.
     const raw = localStorage.getItem(CONFIG_KEY);
-    if (!raw) return { url: "http://127.0.0.1:4318", token: "" };
-    const value = JSON.parse(raw) as { url?: string; token?: string };
-    return { url: value.url || "http://127.0.0.1:4318", token: value.token || "" };
+    const token = sessionStorage.getItem(CONFIG_KEY + ".token") || "";
+    if (!raw) return { url: "http://127.0.0.1:4318", token };
+    const value = JSON.parse(raw) as { url?: string };
+    return { url: value.url || "http://127.0.0.1:4318", token };
   } catch { return { url: "http://127.0.0.1:4318", token: "" }; }
 }
 
@@ -167,7 +170,8 @@ export default function LocalIDE({ projectId, userId, accessToken, isOwner, onNo
       if (!healthResponse.ok) throw new Error("Local worker health check failed.");
       const health = await healthResponse.json() as { paired?: boolean };
       if (!health.paired) throw new Error("The worker needs CONTINUUM_WORKSPACE_ROOT and a 32+ character CONTINUUM_WORKER_TOKEN.");
-      localStorage.setItem(CONFIG_KEY, JSON.stringify({ url, token: config.token.trim() }));
+      localStorage.setItem(CONFIG_KEY, JSON.stringify({ url }));
+      sessionStorage.setItem(CONFIG_KEY + ".token", config.token.trim());
       const details = await api("/api/worker/workspace") as { name: string; branch: string };
       setWorkspace(details);
       await refreshFiles(true);

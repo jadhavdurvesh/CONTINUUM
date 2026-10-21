@@ -1,4 +1,4 @@
-import React from '@theia/core/shared/react';
+import * as React from '@theia/core/shared/react';
 import { injectable, postConstruct } from '@theia/core/shared/inversify';
 import { ReactWidget } from '@theia/core/lib/browser/widgets/react-widget';
 import { createClient, type Session, type SupabaseClient } from '@supabase/supabase-js';
@@ -37,10 +37,6 @@ export class ContinuumCloudWidget extends ReactWidget {
   private password = '';
   private session: Session | null = null;
   private client: SupabaseClient | null = null;
-  private realtimeChannel: ReturnType<SupabaseClient['channel']> | null = null;
-  private realtimeProjectId = '';
-  private realtimeStatus: 'disconnected' | 'connecting' | 'connected' | 'error' = 'disconnected';
-  private realtimeError = '';
   private authSubscription: { unsubscribe: () => void } | undefined;
   private projects: Project[] = [];
   private projectId = '';
@@ -56,7 +52,7 @@ export class ContinuumCloudWidget extends ReactWidget {
   private serviceMessage = 'Not checked yet';
   private providers: string[] = [];
   private showConfig = false;
-  private continuumDisposed = false;
+  private disposed = false;
 
   @postConstruct()
   protected init(): void {
@@ -77,72 +73,13 @@ export class ContinuumCloudWidget extends ReactWidget {
   }
 
   override dispose(): void {
-    this.continuumDisposed = true;
-    this.clearRealtime();
+    this.disposed = true;
     this.authSubscription?.unsubscribe();
     if (this.client) void this.client.auth.stopAutoRefresh();
     super.dispose();
   }
 
-  private clearRealtime(): void {
-    const channel = this.realtimeChannel;
-    const client = this.client;
-    this.realtimeChannel = null;
-    this.realtimeProjectId = '';
-    this.realtimeStatus = 'disconnected';
-    this.realtimeError = '';
-    if (channel && client) void client.removeChannel(channel);
-  }
-
-  private subscribeProjectChanges(): void {
-    const client = this.client;
-    const projectId = this.projectId;
-    if (this.realtimeChannel && this.realtimeProjectId === projectId
-        && this.realtimeStatus !== 'error' && this.realtimeStatus !== 'disconnected') return;
-    this.clearRealtime();
-    if (!client || !projectId || !this.session) return;
-
-    const filter = 'project_id=eq.' + projectId;
-    this.realtimeProjectId = projectId;
-    this.realtimeStatus = 'connecting';
-    this.realtimeError = '';
-    const channel = client.channel('theia-cloud-' + projectId)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_sessions', filter }, () => {
-        if (this.continuumDisposed || client !== this.client || projectId !== this.projectId) return;
-        void this.refreshSessions().catch(error => {
-          this.error = error instanceof Error ? error.message : 'Could not refresh shared agent sessions.';
-          this.update();
-        });
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'agent_messages', filter }, payload => {
-        if (this.continuumDisposed || client !== this.client || projectId !== this.projectId) return;
-        const row = payload.new as { session_id?: string };
-        if (row.session_id !== this.sessionId) return;
-        void this.refreshMessages().catch(error => {
-          this.error = error instanceof Error ? error.message : 'Could not refresh the shared conversation.';
-          this.update();
-        });
-      });
-    this.realtimeChannel = channel;
-    channel.subscribe((status, error) => {
-      if (this.continuumDisposed || client !== this.client || projectId !== this.projectId || this.realtimeChannel !== channel) return;
-      if (status === 'SUBSCRIBED') {
-        this.realtimeStatus = 'connected';
-        this.realtimeError = '';
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        this.realtimeStatus = 'error';
-        this.realtimeError = error?.message || ('Supabase Realtime reported ' + status + '.');
-        this.realtimeChannel = null;
-        this.realtimeProjectId = '';
-        void client.removeChannel(channel);
-      }
-      this.update();
-    });
-    this.update();
-  }
-
   private initializeClient(): void {
-    this.clearRealtime();
     this.authSubscription?.unsubscribe();
     if (this.client) void this.client.auth.stopAutoRefresh();
     const url = this.configUrl.trim().replace(/\/+$/, '');
@@ -156,19 +93,14 @@ export class ContinuumCloudWidget extends ReactWidget {
       this.session = session;
       this.update();
       Promise.resolve().then(() => {
-        if (this.continuumDisposed || client !== this.client) return;
+        if (this.disposed || client !== this.client) return;
         if (session) void this.refreshProjects();
-        else {
-          this.clearRealtime();
-          this.projects = []; this.sessions = []; this.messages = [];
-          this.projectId = ''; this.sessionId = '';
-          this.update();
-        }
+        else { this.projects = []; this.sessions = []; this.messages = []; this.projectId = ''; this.sessionId = ''; this.update(); }
       });
     });
     this.authSubscription = data.subscription;
     void client.auth.getSession().then(({ data: result, error }) => {
-      if (this.continuumDisposed || client !== this.client) return;
+      if (this.disposed || client !== this.client) return;
       if (error) this.error = error.message;
       this.session = result.session;
       this.update();
@@ -236,7 +168,6 @@ export class ContinuumCloudWidget extends ReactWidget {
       if (error) throw error;
       this.projects = (data ?? []) as Project[];
       if (!this.projects.some(p => p.id === this.projectId)) this.projectId = this.projects[0]?.id || '';
-      this.subscribeProjectChanges();
       await this.checkService();
       await this.refreshSessions();
     } catch (e) { this.error = e instanceof Error ? e.message : 'Could not load projects; check workspace membership and Supabase RLS.'; }
@@ -258,44 +189,23 @@ export class ContinuumCloudWidget extends ReactWidget {
 
   private async refreshSessions(): Promise<void> {
     const client = this.client;
-    const projectId = this.projectId;
-    if (!client || !projectId) {
-      this.sessions = [];
-      this.messages = [];
-      this.sessionId = '';
-      this.update();
-      return;
-    }
+    if (!client || !this.projectId) { this.sessions = []; this.messages = []; this.sessionId = ''; return; }
     const { data, error } = await client.from('agent_sessions')
       .select('id,project_id,title,goal,status,current_agent,focus_paths,last_error,updated_at')
-      .eq('project_id', projectId).order('updated_at', { ascending: false }).limit(30);
+      .eq('project_id', this.projectId).order('updated_at', { ascending: false }).limit(30);
     if (error) throw error;
-    // A slower response for a previously selected project must not overwrite
-    // the list for the project the user has switched to in the meantime.
-    if (client !== this.client || projectId !== this.projectId) return;
     this.sessions = (data ?? []) as AgentSession[];
     if (!this.sessions.some(s => s.id === this.sessionId)) this.sessionId = this.sessions[0]?.id || '';
     await this.refreshMessages();
-    this.update();
   }
 
   private async refreshMessages(): Promise<void> {
-    const client = this.client;
-    const projectId = this.projectId;
-    const sessionId = this.sessionId;
-    if (!client || !projectId || !sessionId) {
-      this.messages = [];
-      this.update();
-      return;
-    }
-    const { data, error } = await client.from('agent_messages').select('id,role,content,actor_type,created_at')
-      .eq('project_id', projectId).eq('session_id', sessionId)
+    if (!this.client || !this.projectId || !this.sessionId) { this.messages = []; return; }
+    const { data, error } = await this.client.from('agent_messages').select('id,role,content,actor_type,created_at')
+      .eq('project_id', this.projectId).eq('session_id', this.sessionId)
       .order('created_at', { ascending: false }).limit(12);
     if (error) throw error;
-    // Ignore stale responses from an earlier project/session selection.
-    if (client !== this.client || projectId !== this.projectId || sessionId !== this.sessionId) return;
     this.messages = ((data ?? []) as AgentMessage[]).reverse();
-    this.update();
   }
 
   private async selectSession(id: string): Promise<void> {
@@ -336,17 +246,12 @@ export class ContinuumCloudWidget extends ReactWidget {
   private async runStep(): Promise<void> {
     const client = this.client;
     const token = this.session?.access_token;
-    const projectId = this.projectId;
-    const selectedSessionId = this.sessionId;
-    const selected = this.sessions.find(s => s.id === selectedSessionId);
-    if (!client || !token || !projectId || !selected || selected.status !== 'queued') return;
+    const selected = this.sessions.find(s => s.id === this.sessionId);
+    if (!client || !token || !selected || selected.status !== 'queued') return;
     this.busy = true; this.error = ''; this.notice = ''; this.update();
     try {
-      const { data, error } = await client.from('code_files').select('path,content').eq('project_id', projectId).order('path').limit(500);
+      const { data, error } = await client.from('code_files').select('path,content').eq('project_id', this.projectId).order('path').limit(500);
       if (error) throw error;
-      if (client !== this.client || projectId !== this.projectId) {
-        throw new Error('The selected project changed while preparing agent context. Select the session again and retry.');
-      }
       const focus = new Set(selected.focus_paths || []);
       const candidates = ((data ?? []) as { path: string; content: string }[]).filter(f => !focus.size || focus.has(f.path)).slice(0, MAX_FILES);
       const context: { path: string; content: string }[] = [];
@@ -359,18 +264,14 @@ export class ContinuumCloudWidget extends ReactWidget {
       const response = await fetch(AGENT_API + '/api/agents/run-step', {
         method: 'POST', credentials: 'omit',
         headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: projectId, session_id: selected.id, workspace_context: context })
+        body: JSON.stringify({ project_id: this.projectId, session_id: selected.id, workspace_context: context })
       });
       const result = await response.json().catch(() => ({})) as { error?: string; provider?: string; attempts?: number };
       if (!response.ok) throw new Error(result.error || 'Agent request failed with HTTP ' + response.status + '.');
-      if (client !== this.client) return;
-      if (projectId !== this.projectId) {
-        this.notice = 'Agent step completed for the previous project. Reopen that project to review its shared result.';
-        return;
-      }
       this.notice = 'Agent step completed via ' + (result.provider || 'Vercel') + ((result.attempts || 1) > 1 ? ' with provider fallback.' : '.');
       await this.refreshSessions();
-      if (selectedSessionId === this.sessionId) await this.refreshMessages();
+      this.sessionId = selected.id;
+      await this.refreshMessages();
     } catch (e) {
       this.error = e instanceof Error ? e.message : 'Agent run failed.';
       try { await this.refreshSessions(); } catch { /* Preserve the primary error. */ }
@@ -401,7 +302,6 @@ export class ContinuumCloudWidget extends ReactWidget {
       this.button('Save settings', () => void this.saveConfig(), !this.configUrl.trim() || !this.publishableKey.trim(), true),
       this.button('Reset settings', () => {
         window.localStorage.removeItem(CONFIG_KEY); window.localStorage.removeItem(AUTH_STORAGE_KEY);
-        this.clearRealtime();
         this.authSubscription?.unsubscribe();
         if (this.client) void this.client.auth.stopAutoRefresh();
         this.client = null; this.session = null;
@@ -456,7 +356,6 @@ export class ContinuumCloudWidget extends ReactWidget {
         h('label', { style: fieldStyle }, h('span', { style: labelStyle }, 'Shared project'),
           h('select', { style: inputStyle, value: this.projectId, onChange: (event: React.ChangeEvent<HTMLSelectElement>) => {
             this.projectId = event.target.value; this.sessionId = '';
-            this.subscribeProjectChanges();
             void this.refreshSessions().catch(e => { this.error = e.message; this.update(); });
             this.update();
           } },
@@ -465,8 +364,6 @@ export class ContinuumCloudWidget extends ReactWidget {
           )
         ),
         h('div', { style: textStyle }, this.projects.length + ' accessible project(s) · access governed by Supabase RLS.'),
-        h('div', { style: textStyle }, 'Live sync: ' + this.realtimeStatus + (this.realtimeError ? ' — ' + this.realtimeError : '')),
-        this.button('Reconnect live sync', () => this.subscribeProjectChanges(), !this.projectId || !this.session),
         this.button('Refresh projects / sessions', () => void this.refreshProjects(), !this.projectId),
         this.button('Sign out', () => void this.signOut())
       ),

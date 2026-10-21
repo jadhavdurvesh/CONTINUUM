@@ -16,6 +16,16 @@ _SECRET_NAMES = {
 _SECRET_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".keystore"}
 
 
+_AUTOMATION_DIRS = {".github", ".husky", ".githooks", ".vscode", ".gitlab"}
+_AUTOMATION_FILES = {".gitattributes", ".gitmodules", ".gitlab-ci.yml"}
+
+
+def is_automation_path(relative: str | Path) -> bool:
+    """CI, git-hook and editor-task files run code automatically; agent proposals must not write them."""
+    parts = [part.lower() for part in Path(str(relative).replace("\\", "/")).parts]
+    return bool(parts) and (any(part in _AUTOMATION_DIRS for part in parts) or parts[-1] in _AUTOMATION_FILES)
+
+
 class WorkspaceError(ValueError):
     """A workspace path is invalid or not safe to edit."""
 

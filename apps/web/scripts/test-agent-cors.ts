@@ -1,12 +1,15 @@
-import { isAllowedAgentOrigin, setAgentCors } from "../api/agents/cors";
+import { isAllowedAgentOrigin, setAgentCors } from "../api/_lib/cors";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error("Agent CORS test failed: " + message);
 }
-assert(isAllowedAgentOrigin("https://continuum-dun-ten.vercel.app"), "production dashboard origin");
+process.env.CONTINUUM_DASHBOARD_ORIGIN = "https://dashboard.example.com/, https://second.example.com";
+assert(isAllowedAgentOrigin("https://dashboard.example.com"), "configured dashboard origin (trailing slash tolerated)");
+assert(isAllowedAgentOrigin("https://second.example.com"), "second configured origin");
 assert(isAllowedAgentOrigin("http://localhost:3000"), "local desktop renderer");
 assert(isAllowedAgentOrigin("http://127.0.0.1:4567"), "IPv4 loopback");
 assert(!isAllowedAgentOrigin("https://attacker.example"), "arbitrary external origin rejected");
+assert(!isAllowedAgentOrigin("https://dashboard.example.com.attacker.example"), "suffix lookalike rejected");
 assert(!isAllowedAgentOrigin("null"), "opaque origin rejected");
 const captured: Record<string, string> = {};
 const allowed = setAgentCors(

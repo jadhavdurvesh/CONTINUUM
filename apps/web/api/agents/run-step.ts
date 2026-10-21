@@ -1,10 +1,11 @@
-import { setAgentCors } from "./cors";
+import { setAgentCors } from "../_lib/cors";
+import { parseProposal } from "../_lib/proposal";
 
-type AgentRole = "planner" | "coder" | "reviewer" | "qa";
-type AgentPayload = { summary: string; files: { path: string; content: string }[]; next_role: AgentRole; status: "needs_review" | "completed"; review_notes?: string };
 type ContextFile = { path: string; content: string };
 
-const ROLES: AgentRole[] = ["planner", "coder", "reviewer", "qa"];
+class HttpError extends Error {
+  constructor(readonly status: number, message: string) { super(message); }
+}
 
 function send(res: any, status: number, body: Record<string, unknown>) {
   res.status(status).json(body);
@@ -12,40 +13,6 @@ function send(res: any, status: number, body: Record<string, unknown>) {
 function boundedString(value: unknown, max: number): string {
   return typeof value === "string" ? value.slice(0, max) : "";
 }
-function parseJson(raw: string): AgentPayload {
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("The model did not return a JSON proposal.");
-  const value = JSON.parse(match[0]) as Partial<AgentPayload>;
-  if (typeof value.summary !== "string" || !value.summary.trim() || !Array.isArray(value.files) || value.files.length > 12) {
-    throw new Error("The model returned an invalid proposal.");
-  }
-  const files = value.files.map((file) => {
-    if (!file || typeof file.path !== "string" || typeof file.content !== "string") throw new Error("A proposed file was malformed.");
-    const path = file.path.replaceAll("\\", "/").trim();
-    if (!path || path.startsWith("/") || path.split("/").some(part => !part || part === "." || part === "..") || /^[A-Za-z]:/.test(path)) {
-      throw new Error("The proposal contains an unsafe relative path.");
-    }
-    const parts = path.toLowerCase().split("/");
-    const blockedDirectories = new Set([".git", ".hg", ".svn", ".ssh", ".aws", ".azure", ".gnupg", ".venv", "venv", "node_modules", "private", "secret", "secrets"]);
-    const blockedFiles = new Set([".npmrc", ".pypirc", "credentials.json", "service-account.json", "id_rsa", "id_ed25519", "id_ecdsa"]);
-    const sensitive = parts.some(part =>
-      blockedDirectories.has(part) || blockedFiles.has(part) ||
-      part === ".env" || part.startsWith(".env.") ||
-      part.endsWith("_secret") || part.endsWith("_credentials")
-    ) || /\.(pem|key|p12|pfx|keystore)$/i.test(path);
-    if (sensitive) {
-      throw new Error("The proposal targets a credential, secret, generated, or dependency path, which is blocked.");
-    }
-    return { path, content: file.content.slice(0, 150000) };
-  });
-  const allowed = ROLES.includes(value.next_role as AgentRole) ? value.next_role as AgentRole : "reviewer";
-  return {
-    summary: value.summary.slice(0, 8000), files, next_role: allowed,
-    status: value.status === "completed" && files.length === 0 ? "completed" : "needs_review",
-    review_notes: typeof value.review_notes === "string" ? value.review_notes.slice(0, 8000) : "",
-  };
-}
-
 async function fetchJson(url: string, token: string, key: string, method = "GET", body?: unknown, prefer?: string) {
   const response = await fetch(url, {
     method,
@@ -60,11 +27,16 @@ async function fetchJson(url: string, token: string, key: string, method = "GET"
   const raw = await response.text();
   let result: any = null;
   try { result = raw ? JSON.parse(raw) : null; } catch { result = raw; }
-  if (!response.ok) throw new Error("Supabase request failed (" + response.status + "): " + (typeof result === "string" ? result : JSON.stringify(result)).slice(0, 400));
+  if (!response.ok) {
+    const detail = (typeof result === "string" ? result : JSON.stringify(result)).slice(0, 400);
+    if (response.status === 401) throw new HttpError(401, "Cloud session expired. Sign in again.");
+    if (response.status === 403) throw new HttpError(403, "The cloud workspace denied this action.");
+    throw new HttpError(502, "Supabase request failed (" + response.status + "): " + detail);
+  }
   return result;
 }
 
-async function askProvider(prompt: string): Promise<{ text: string; provider: string; model: string; attempts: number }> {
+async function askProvider(prompt: string, deadline: number): Promise<{ text: string; provider: string; model: string; attempts: number }> {
   const candidates = [
     { name: "OpenAI", key: process.env.OPENAI_API_KEY, base: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1", model: process.env.OPENAI_MODEL || "gpt-4o-mini" },
     { name: "Groq", key: process.env.GROQ_API_KEY, base: "https://api.groq.com/openai/v1", model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile" },
@@ -74,6 +46,7 @@ async function askProvider(prompt: string): Promise<{ text: string; provider: st
   const failures: string[] = [];
   for (let index = 0; index < candidates.length; index++) {
     const candidate = candidates[index];
+    if (deadline - Date.now() < 5000) { failures.push(candidate.name + ": skipped, out of time"); continue; }
     try {
       const response = await fetch(candidate.base.replace(/\/$/, "") + "/chat/completions", {
         method: "POST",
@@ -85,9 +58,9 @@ async function askProvider(prompt: string): Promise<{ text: string; provider: st
             { role: "user", content: prompt },
           ],
         }),
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(Math.max(3000, Math.min(18000, deadline - Date.now() - 2000))),
       });
-      const result = await response.json() as any;
+      const result = await response.json().catch(() => null) as any;
       if (!response.ok) throw new Error("provider returned HTTP " + response.status + " " + (result?.error?.message || ""));
       const text = result?.choices?.[0]?.message?.content;
       if (typeof text !== "string") throw new Error("provider returned no text");
@@ -111,6 +84,7 @@ export default async function handler(req: any, res: any) {
   const token = typeof req.headers.authorization === "string" ? req.headers.authorization.replace(/^Bearer\s+/i, "") : "";
   if (!supabaseUrl || !publishableKey) return send(res, 503, { error: "Supabase server environment is not configured." });
   if (!token) return send(res, 401, { error: "Sign in before running a cloud agent." });
+  const deadline = Date.now() + 52000; // vercel.json maxDuration is 60s; keep headroom for the DB writes.
   const body = req.body && typeof req.body === "object" ? req.body as Record<string, unknown> : {};
   const projectId = boundedString(body.project_id, 64);
   const sessionId = boundedString(body.session_id, 64);
@@ -122,14 +96,17 @@ export default async function handler(req: any, res: any) {
     const root = supabaseUrl;
     const user = await fetchJson(root + "/auth/v1/user", token, publishableKey);
     if (!user?.id) return send(res, 401, { error: "Cloud session expired." });
-    const sessionRows = await fetchJson(root + "/rest/v1/agent_sessions?select=id,project_id,title,goal,current_agent,status,focus_paths,checkpoint,task_id&id=eq." + sessionId + "&project_id=eq." + projectId + "&limit=1", token, publishableKey);
+    const sessionRows = await fetchJson(root + "/rest/v1/agent_sessions?select=id,project_id,title,goal,current_agent,status,focus_paths,checkpoint,task_id,started_at&id=eq." + sessionId + "&project_id=eq." + projectId + "&limit=1", token, publishableKey);
     if (!Array.isArray(sessionRows) || !sessionRows[0]) return send(res, 404, { error: "Agent session was not found in this project." });
     const session = sessionRows[0];
-    if (session.status !== "queued") return send(res, 409, { error: "Only queued sessions can run a step. Current status: " + session.status });
-    const messages = await fetchJson(root + "/rest/v1/agent_messages?select=role,actor_type,content,metadata,created_at&project_id=eq." + projectId + "&session_id=eq." + sessionId + "&order=created_at.asc&limit=40", token, publishableKey);
+    // A function killed mid-run (timeout, deploy) leaves the session "running" forever; treat runs older than 5 minutes as abandoned.
+    const staleBefore = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const isStale = session.status === "running" && typeof session.started_at === "string" && Date.parse(session.started_at) < Date.parse(staleBefore);
+    if (session.status !== "queued" && !isStale) return send(res, 409, { error: "Only queued sessions can run a step. Current status: " + session.status });
+    const messages = await fetchJson(root + "/rest/v1/agent_messages?select=role,actor_type,content,metadata,created_at&project_id=eq." + projectId + "&session_id=eq." + sessionId + "&order=created_at.desc&limit=12", token, publishableKey);
     const safeContext = workspaceContext.filter((file: any) => file && typeof file.path === "string" && typeof file.content === "string")
       .map((file: ContextFile) => ({ path: file.path.slice(0, 240), content: file.content.slice(0, 12000) }));
-    const history = (Array.isArray(messages) ? messages : []).slice(-12).map((message: any) => ({
+    const history = (Array.isArray(messages) ? messages : []).slice().reverse().map((message: any) => ({
       role: message.role === "assistant" ? "assistant" : "user",
       content: String(message.content || "").slice(0, 6000),
     }));
@@ -143,14 +120,15 @@ export default async function handler(req: any, res: any) {
       local_workspace_files: safeContext,
       instruction: "Perform one bounded step for the current role. Use only the provided file snippets. Keep changes minimal and compatible with the existing code. Include full replacement contents only for files you intend the user to review and apply. Do not claim unexecuted tests passed.",
     });
-    // Make running state durable before contacting the model. On failure, write
-    // an explicit error state, so sessions do not remain silently queued.
-    await fetchJson(root + "/rest/v1/agent_sessions?id=eq." + sessionId + "&project_id=eq." + projectId, token, publishableKey, "PATCH", {
-      status: "running", started_at: new Date().toISOString(), last_error: null,
-    }, "return=minimal");
+    // Atomically claim the session: the filter on status=queued makes this a compare-and-swap, so two
+    // concurrent requests cannot both run the same step (and double-spend model credits).
+    const claimed = await fetchJson(root + "/rest/v1/agent_sessions?id=eq." + sessionId + "&project_id=eq." + projectId + (isStale ? "&status=eq.running&started_at=lt." + encodeURIComponent(staleBefore) : "&status=eq.queued"), token, publishableKey, "PATCH", {
+      status: "running", claimed_by: String(user.id), started_at: new Date().toISOString(), last_error: null,
+    }, "return=representation");
+    if (!Array.isArray(claimed) || !claimed[0]) return send(res, 409, { error: "Another request already claimed this session. Refresh and try again." });
     try {
-      const generated = await askProvider(prompt);
-      const payload = parseJson(generated.text);
+      const generated = await askProvider(prompt, deadline);
+      const payload = parseProposal(generated.text);
       const userId = String(user.id);
       const messageContent = JSON.stringify(payload);
       await fetchJson(root + "/rest/v1/agent_messages", token, publishableKey, "POST", {
@@ -165,18 +143,19 @@ export default async function handler(req: any, res: any) {
         last_step_at: new Date().toISOString(), next_role: payload.next_role,
       };
       await fetchJson(root + "/rest/v1/agent_sessions?id=eq." + sessionId + "&project_id=eq." + projectId, token, publishableKey, "PATCH", {
-        current_agent: payload.next_role, status: payload.status,
+        current_agent: payload.next_role, status: payload.status, claimed_by: null,
         checkpoint, finished_at: payload.status === "completed" ? new Date().toISOString() : null,
       }, "return=minimal");
       return send(res, 200, { ok: true, provider: generated.provider, model: generated.model, attempts: generated.attempts, proposal: payload });
     } catch (error) {
       const message = (error instanceof Error ? error.message : String(error)).slice(0, 1500);
       await fetchJson(root + "/rest/v1/agent_sessions?id=eq." + sessionId + "&project_id=eq." + projectId, token, publishableKey, "PATCH", {
-        status: "failed", last_error: message, finished_at: new Date().toISOString(),
+        status: "failed", claimed_by: null, last_error: message, finished_at: new Date().toISOString(),
       }, "return=minimal").catch(() => null);
       throw error;
     }
   } catch (error) {
+    if (error instanceof HttpError) return send(res, error.status, { error: error.message });
     return send(res, 502, { error: error instanceof Error ? error.message : "Cloud agent request failed." });
   }
 }
