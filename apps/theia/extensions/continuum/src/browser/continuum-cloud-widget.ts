@@ -37,6 +37,8 @@ export class ContinuumCloudWidget extends ReactWidget {
   private password = '';
   private session: Session | null = null;
   private client: SupabaseClient | null = null;
+  private realtimeChannel: ReturnType<SupabaseClient['channel']> | null = null;
+  private realtimeProjectId = '';
   private authSubscription: { unsubscribe: () => void } | undefined;
   private projects: Project[] = [];
   private projectId = '';
@@ -74,12 +76,51 @@ export class ContinuumCloudWidget extends ReactWidget {
 
   override dispose(): void {
     this.disposed = true;
+    this.clearRealtime();
     this.authSubscription?.unsubscribe();
     if (this.client) void this.client.auth.stopAutoRefresh();
     super.dispose();
   }
 
+  private clearRealtime(): void {
+    const channel = this.realtimeChannel;
+    const client = this.client;
+    this.realtimeChannel = null;
+    this.realtimeProjectId = '';
+    if (channel && client) void client.removeChannel(channel);
+  }
+
+  private subscribeProjectChanges(): void {
+    const client = this.client;
+    const projectId = this.projectId;
+    if (this.realtimeChannel && this.realtimeProjectId === projectId) return;
+    this.clearRealtime();
+    if (!client || !projectId) return;
+
+    const filter = 'project_id=eq.' + projectId;
+    this.realtimeProjectId = projectId;
+    this.realtimeChannel = client.channel('theia-cloud-' + projectId)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_sessions', filter }, () => {
+        if (this.disposed || client !== this.client || projectId !== this.projectId) return;
+        void this.refreshSessions().catch(error => {
+          this.error = error instanceof Error ? error.message : 'Could not refresh shared agent sessions.';
+          this.update();
+        });
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'agent_messages', filter }, payload => {
+        if (this.disposed || client !== this.client || projectId !== this.projectId) return;
+        const row = payload.new as { session_id?: string };
+        if (row.session_id !== this.sessionId) return;
+        void this.refreshMessages().catch(error => {
+          this.error = error instanceof Error ? error.message : 'Could not refresh the shared conversation.';
+          this.update();
+        });
+      })
+      .subscribe();
+  }
+
   private initializeClient(): void {
+    this.clearRealtime();
     this.authSubscription?.unsubscribe();
     if (this.client) void this.client.auth.stopAutoRefresh();
     const url = this.configUrl.trim().replace(/\/+$/, '');
@@ -95,7 +136,12 @@ export class ContinuumCloudWidget extends ReactWidget {
       Promise.resolve().then(() => {
         if (this.disposed || client !== this.client) return;
         if (session) void this.refreshProjects();
-        else { this.projects = []; this.sessions = []; this.messages = []; this.projectId = ''; this.sessionId = ''; this.update(); }
+        else {
+          this.clearRealtime();
+          this.projects = []; this.sessions = []; this.messages = [];
+          this.projectId = ''; this.sessionId = '';
+          this.update();
+        }
       });
     });
     this.authSubscription = data.subscription;
@@ -168,6 +214,7 @@ export class ContinuumCloudWidget extends ReactWidget {
       if (error) throw error;
       this.projects = (data ?? []) as Project[];
       if (!this.projects.some(p => p.id === this.projectId)) this.projectId = this.projects[0]?.id || '';
+      this.subscribeProjectChanges();
       await this.checkService();
       await this.refreshSessions();
     } catch (e) { this.error = e instanceof Error ? e.message : 'Could not load projects; check workspace membership and Supabase RLS.'; }
@@ -323,6 +370,7 @@ export class ContinuumCloudWidget extends ReactWidget {
       this.button('Save settings', () => void this.saveConfig(), !this.configUrl.trim() || !this.publishableKey.trim(), true),
       this.button('Reset settings', () => {
         window.localStorage.removeItem(CONFIG_KEY); window.localStorage.removeItem(AUTH_STORAGE_KEY);
+        this.clearRealtime();
         this.authSubscription?.unsubscribe();
         if (this.client) void this.client.auth.stopAutoRefresh();
         this.client = null; this.session = null;
@@ -377,6 +425,7 @@ export class ContinuumCloudWidget extends ReactWidget {
         h('label', { style: fieldStyle }, h('span', { style: labelStyle }, 'Shared project'),
           h('select', { style: inputStyle, value: this.projectId, onChange: (event: React.ChangeEvent<HTMLSelectElement>) => {
             this.projectId = event.target.value; this.sessionId = '';
+            this.subscribeProjectChanges();
             void this.refreshSessions().catch(e => { this.error = e.message; this.update(); });
             this.update();
           } },
