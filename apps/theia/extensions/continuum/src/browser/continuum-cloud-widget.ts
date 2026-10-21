@@ -52,7 +52,7 @@ export class ContinuumCloudWidget extends ReactWidget {
   private serviceMessage = 'Not checked yet';
   private providers: string[] = [];
   private showConfig = false;
-  private disposed = false;
+  private destroyed = false;
 
   @postConstruct()
   protected init(): void {
@@ -73,7 +73,7 @@ export class ContinuumCloudWidget extends ReactWidget {
   }
 
   override dispose(): void {
-    this.disposed = true;
+    this.destroyed = true;
     this.authSubscription?.unsubscribe();
     if (this.client) void this.client.auth.stopAutoRefresh();
     super.dispose();
@@ -93,14 +93,14 @@ export class ContinuumCloudWidget extends ReactWidget {
       this.session = session;
       this.update();
       Promise.resolve().then(() => {
-        if (this.disposed || client !== this.client) return;
+        if (this.destroyed || client !== this.client) return;
         if (session) void this.refreshProjects();
         else { this.projects = []; this.sessions = []; this.messages = []; this.projectId = ''; this.sessionId = ''; this.update(); }
       });
     });
     this.authSubscription = data.subscription;
     void client.auth.getSession().then(({ data: result, error }) => {
-      if (this.disposed || client !== this.client) return;
+      if (this.destroyed || client !== this.client) return;
       if (error) this.error = error.message;
       this.session = result.session;
       this.update();
