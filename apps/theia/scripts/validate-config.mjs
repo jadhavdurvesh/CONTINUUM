@@ -17,6 +17,7 @@ assert.equal(app.build?.appId, "tech.dmjgroup.continuum", "Installer app ID must
 assert.equal(app.dependencies?.["@continuum/ide-extension"], extension.version, "Local extension version must match app dependency");
 assert.ok(app.workspaces?.includes("extensions/continuum"), "The custom extension must be in the Yarn workspace");
 assert.ok(app.dependencies?.["@theia/electron"], "Theia Electron target package must be a runtime dependency");
+assert.ok(!app.dependencies?.["@theia/scm-extra"], "Deprecated private Theia SCM extra package must not be installed from npm");
 
 const theiaVersions = Object.entries(app.dependencies ?? {}).filter(([name]) => name.startsWith("@theia/"));
 assert.ok(theiaVersions.length >= 25, "Expected a full workbench package set");
