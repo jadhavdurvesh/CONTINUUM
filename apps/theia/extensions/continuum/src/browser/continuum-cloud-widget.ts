@@ -1,4 +1,4 @@
-import * as React from '@theia/core/shared/react';
+import React from '@theia/core/shared/react';
 import { injectable, postConstruct } from '@theia/core/shared/inversify';
 import { ReactWidget } from '@theia/core/lib/browser/widgets/react-widget';
 import { createClient, type Session, type SupabaseClient } from '@supabase/supabase-js';
@@ -56,7 +56,7 @@ export class ContinuumCloudWidget extends ReactWidget {
   private serviceMessage = 'Not checked yet';
   private providers: string[] = [];
   private showConfig = false;
-  private disposed = false;
+  private continuumDisposed = false;
 
   @postConstruct()
   protected init(): void {
@@ -77,7 +77,7 @@ export class ContinuumCloudWidget extends ReactWidget {
   }
 
   override dispose(): void {
-    this.disposed = true;
+    this.continuumDisposed = true;
     this.clearRealtime();
     this.authSubscription?.unsubscribe();
     if (this.client) void this.client.auth.stopAutoRefresh();
@@ -108,14 +108,14 @@ export class ContinuumCloudWidget extends ReactWidget {
     this.realtimeError = '';
     const channel = client.channel('theia-cloud-' + projectId)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_sessions', filter }, () => {
-        if (this.disposed || client !== this.client || projectId !== this.projectId) return;
+        if (this.continuumDisposed || client !== this.client || projectId !== this.projectId) return;
         void this.refreshSessions().catch(error => {
           this.error = error instanceof Error ? error.message : 'Could not refresh shared agent sessions.';
           this.update();
         });
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'agent_messages', filter }, payload => {
-        if (this.disposed || client !== this.client || projectId !== this.projectId) return;
+        if (this.continuumDisposed || client !== this.client || projectId !== this.projectId) return;
         const row = payload.new as { session_id?: string };
         if (row.session_id !== this.sessionId) return;
         void this.refreshMessages().catch(error => {
@@ -125,7 +125,7 @@ export class ContinuumCloudWidget extends ReactWidget {
       });
     this.realtimeChannel = channel;
     channel.subscribe((status, error) => {
-      if (this.disposed || client !== this.client || projectId !== this.projectId || this.realtimeChannel !== channel) return;
+      if (this.continuumDisposed || client !== this.client || projectId !== this.projectId || this.realtimeChannel !== channel) return;
       if (status === 'SUBSCRIBED') {
         this.realtimeStatus = 'connected';
         this.realtimeError = '';
@@ -156,7 +156,7 @@ export class ContinuumCloudWidget extends ReactWidget {
       this.session = session;
       this.update();
       Promise.resolve().then(() => {
-        if (this.disposed || client !== this.client) return;
+        if (this.continuumDisposed || client !== this.client) return;
         if (session) void this.refreshProjects();
         else {
           this.clearRealtime();
@@ -168,7 +168,7 @@ export class ContinuumCloudWidget extends ReactWidget {
     });
     this.authSubscription = data.subscription;
     void client.auth.getSession().then(({ data: result, error }) => {
-      if (this.disposed || client !== this.client) return;
+      if (this.continuumDisposed || client !== this.client) return;
       if (error) this.error = error.message;
       this.session = result.session;
       this.update();
