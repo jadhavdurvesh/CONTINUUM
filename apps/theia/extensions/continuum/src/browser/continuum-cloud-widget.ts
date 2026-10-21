@@ -75,11 +75,13 @@ export class ContinuumCloudWidget extends ReactWidget {
   override dispose(): void {
     this.disposed = true;
     this.authSubscription?.unsubscribe();
+    if (this.client) void this.client.auth.stopAutoRefresh();
     super.dispose();
   }
 
   private initializeClient(): void {
     this.authSubscription?.unsubscribe();
+    if (this.client) void this.client.auth.stopAutoRefresh();
     const url = this.configUrl.trim().replace(/\/+$/, '');
     const key = this.publishableKey.trim();
     if (!url || !key) { this.client = null; this.session = null; this.update(); return; }
