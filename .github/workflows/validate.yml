@@ -28,6 +28,9 @@ jobs:
         run: |
           npx esbuild api/agents/status.ts --platform=node --format=esm --outfile=/tmp/agents-status.mjs
           npx esbuild api/agents/run-step.ts --platform=node --format=esm --outfile=/tmp/agents-run-step.mjs
+          npx esbuild api/agents/cors.ts --platform=node --format=esm --outfile=/tmp/agents-cors.mjs
+          npx esbuild scripts/test-agent-cors.ts --bundle --platform=node --format=esm --outfile=/tmp/test-agent-cors.mjs
+          node /tmp/test-agent-cors.mjs
 
   theia-config:
     runs-on: ubuntu-latest
