@@ -189,23 +189,44 @@ export class ContinuumCloudWidget extends ReactWidget {
 
   private async refreshSessions(): Promise<void> {
     const client = this.client;
-    if (!client || !this.projectId) { this.sessions = []; this.messages = []; this.sessionId = ''; return; }
+    const projectId = this.projectId;
+    if (!client || !projectId) {
+      this.sessions = [];
+      this.messages = [];
+      this.sessionId = '';
+      this.update();
+      return;
+    }
     const { data, error } = await client.from('agent_sessions')
       .select('id,project_id,title,goal,status,current_agent,focus_paths,last_error,updated_at')
-      .eq('project_id', this.projectId).order('updated_at', { ascending: false }).limit(30);
+      .eq('project_id', projectId).order('updated_at', { ascending: false }).limit(30);
     if (error) throw error;
+    // A slower response for a previously selected project must not overwrite
+    // the list for the project the user has switched to in the meantime.
+    if (client !== this.client || projectId !== this.projectId) return;
     this.sessions = (data ?? []) as AgentSession[];
     if (!this.sessions.some(s => s.id === this.sessionId)) this.sessionId = this.sessions[0]?.id || '';
     await this.refreshMessages();
+    this.update();
   }
 
   private async refreshMessages(): Promise<void> {
-    if (!this.client || !this.projectId || !this.sessionId) { this.messages = []; return; }
-    const { data, error } = await this.client.from('agent_messages').select('id,role,content,actor_type,created_at')
-      .eq('project_id', this.projectId).eq('session_id', this.sessionId)
+    const client = this.client;
+    const projectId = this.projectId;
+    const sessionId = this.sessionId;
+    if (!client || !projectId || !sessionId) {
+      this.messages = [];
+      this.update();
+      return;
+    }
+    const { data, error } = await client.from('agent_messages').select('id,role,content,actor_type,created_at')
+      .eq('project_id', projectId).eq('session_id', sessionId)
       .order('created_at', { ascending: false }).limit(12);
     if (error) throw error;
+    // Ignore stale responses from an earlier project/session selection.
+    if (client !== this.client || projectId !== this.projectId || sessionId !== this.sessionId) return;
     this.messages = ((data ?? []) as AgentMessage[]).reverse();
+    this.update();
   }
 
   private async selectSession(id: string): Promise<void> {
