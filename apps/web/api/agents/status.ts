@@ -1,4 +1,8 @@
+import { setAgentCors } from "./cors";
+
 export default function handler(req: any, res: any) {
+  if (!setAgentCors(req, res)) return res.status(403).json({ error: "Origin is not allowed." });
+  if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "GET") {
     res.setHeader("Allow", "GET");
     return res.status(405).json({ error: "Method not allowed." });
