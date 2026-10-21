@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "build": "tsc --noEmit && npm run typecheck:api && vite build",
+    "preview": "vite preview",
+    "typecheck:api": "tsc --noEmit -p tsconfig.api.json",
+    "test:api": "esbuild scripts/test-agent-cors.ts --bundle --platform=node --format=esm --outfile=/tmp/test-agent-cors.mjs && node /tmp/test-agent-cors.mjs && esbuild scripts/test-agent-proposal.ts --bundle --platform=node --format=esm --outfile=/tmp/test-agent-proposal.mjs && node /tmp/test-agent-proposal.mjs"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",
@@ -27,6 +29,11 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "~5.7.2",
-    "vite": "^6.0.5"
+    "vite": "^6.0.5",
+    "esbuild": "^0.25.0",
+    "@types/node": "^22.10.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

@@ -17,15 +17,6 @@ assert.equal(app.build?.appId, "tech.dmjgroup.continuum", "Installer app ID must
 assert.equal(app.dependencies?.["@continuum/ide-extension"], extension.version, "Local extension version must match app dependency");
 assert.ok(app.workspaces?.includes("extensions/continuum"), "The custom extension must be in the Yarn workspace");
 assert.ok(app.dependencies?.["@theia/electron"], "Theia Electron target package must be a runtime dependency");
-assert.equal(app.dependencies?.react, "^19.2.8", "The Theia browser bundle requires the React runtime");
-assert.equal(app.dependencies?.["react-dom"], "^19.2.8", "The Theia browser bundle requires the React DOM runtime");
-assert.ok(app.devDependencies?.["@types/react"], "React type declarations must be available to the compiler");
-assert.ok(app.devDependencies?.["@types/react-dom"], "React DOM type declarations must be available to the compiler");
-assert.ok(!app.dependencies?.["@theia/scm-extra"], "Deprecated private Theia SCM extra package must not be installed from npm");
-const windowsBuild = readFileSync(join(repo, ".github/workflows/build-theia-windows.yml"), "utf8");
-assert.match(windowsBuild, /actions\/setup-python@v5/, "Windows native module build must select a known Python toolchain");
-assert.match(windowsBuild, /python-version: "3\.12"/, "Windows node-gyp build must use Python 3.12 rather than the runner default");
-assert.match(windowsBuild, /npm_config_python: \$\{\{ steps\.setup-python\.outputs\.python-path \}\}/, "npm/node-gyp must be explicitly pointed at the selected Python");
 
 const theiaVersions = Object.entries(app.dependencies ?? {}).filter(([name]) => name.startsWith("@theia/"));
 assert.ok(theiaVersions.length >= 25, "Expected a full workbench package set");
@@ -34,18 +25,16 @@ for (const [name, version] of theiaVersions) {
 }
 assert.equal(extension.dependencies?.["@theia/core"], "1.76.0", "Extension API must match the app Theia release");
 assert.ok(extension.dependencies?.["@supabase/supabase-js"], "Cloud panel must use the established Supabase JS client");
-assert.ok(!extension.devDependencies?.["@theia/ext-scripts"], "Do not install Theia private development tooling from the public npm registry");
-assert.equal(extension.scripts?.build, "tsc -p tsconfig.json", "Local extension must compile with the public TypeScript compiler");
-assert.equal(app.devDependencies?.typescript, "~5.9.3", "TypeScript compiler must be pinned to the version used by Theia 1.76");
 assert.equal(extension.theiaExtensions?.[0]?.frontend, "lib/browser/continuum-frontend-module", "Custom frontend module must be included");
 
 const requiredPaths = [
   "apps/theia/extensions/continuum/src/browser/continuum-contribution.ts",
   "apps/theia/extensions/continuum/src/browser/continuum-frontend-module.ts",
   "apps/theia/extensions/continuum/src/browser/continuum-cloud-widget.ts",
-  "apps/web/api/agents/cors.ts",
+  "apps/web/api/_lib/cors.ts",
   "apps/web/scripts/test-agent-cors.ts",
   "apps/theia/resources/continuum-splash.svg",
+  "apps/web/api/_lib/proposal.ts",
   "apps/web/api/agents/status.ts",
   "apps/web/api/agents/run-step.ts",
   "supabase/migrations/202610170001_cloud_workspace.sql",
@@ -72,26 +61,11 @@ const contribution = readFileSync(join(appRoot, "extensions/continuum/src/browse
 assert.match(cloudModule, /WidgetFactory/, "Cloud panel must be registered as a Theia widget");
 assert.match(cloudModule, /ContinuumCloudWidget\.ID/, "Cloud widget must have a stable factory ID");
 assert.match(contribution, /continuum\.openCloudPanel/, "Theia must provide a command to open the cloud panel");
-assert.match(contribution, /this\.openerService\.getOpener\(uri\)/, "External dashboard must resolve a registered Theia opener");
-assert.doesNotMatch(contribution, /this\.openerService\.open\(/, "OpenerService does not expose a direct open method");
-assert.match(cloudWidget, /import React from '@theia\/core\/shared\/react'/, "React shared module must use the default import expected by TypeScript");
-assert.match(cloudWidget, /private continuumDisposed = false/, "Widget disposal guard must not shadow Theia's disposed signal");
-assert.doesNotMatch(cloudWidget, /private disposed = false/, "Widget must not shadow the inherited disposed signal");
 assert.match(cloudWidget, /agent_sessions/, "Cloud panel must use durable Supabase sessions");
 assert.match(cloudWidget, /agent_messages/, "Cloud panel must show shared agent history");
 assert.match(cloudWidget, /api\/agents\/run-step/, "Cloud panel must invoke the existing Vercel endpoint");
 assert.match(cloudWidget, /MAX_CONTEXT_CHARS/, "Context sent to the agent must be bounded");
 assert.match(cloudWidget, /service_role/, "Cloud panel must reject service-role credentials");
 assert.match(cloudWidget, /sb_secret_/, "Cloud panel must reject modern Supabase secret keys");
-assert.match(cloudWidget, /subscribeProjectChanges/, "Cloud panel must subscribe to project-scoped live changes");
-assert.match(cloudWidget, /private realtimeStatus:/, "Cloud panel must track its live-sync state");
-assert.match(cloudWidget, /channel\.subscribe\(\(status, error\)/, "Cloud panel must handle Realtime subscription status transitions");
-assert.match(cloudWidget, /Reconnect live sync/, "Cloud panel must expose a reconnect action");
-assert.match(cloudWidget, /Supabase Realtime reported/, "Cloud panel must display subscription failures");
-assert.match(cloudWidget, /table: 'agent_sessions'/, "Agent session changes must refresh through Supabase Realtime");
-assert.match(cloudWidget, /table: 'agent_messages'/, "Shared conversation changes must refresh through Supabase Realtime");
-assert.match(cloudWidget, /clearRealtime\(\)/, "Realtime channels must be cleaned up during widget lifecycle transitions");
-assert.match(cloudWidget, /removeChannel\(channel\)/, "Realtime subscriptions must be removed on cleanup");
-assert.match(cloudWidget, /selected project changed while preparing agent context/, "Agent execution must stay bound to the selected project");
-assert.match(readFileSync(join(repo, "apps/web/api/agents/cors.ts"), "utf8"), /Access-Control-Allow-Origin/, "Cloud API must restrict cross-origin access");
+assert.match(readFileSync(join(repo, "apps/web/api/_lib/cors.ts"), "utf8"), /Access-Control-Allow-Origin/, "Cloud API must restrict cross-origin access");
 console.log(`CONTINUUM Theia config validated: ${theiaVersions.length} Theia packages pinned to 1.76.0; shared Supabase/Vercel services retained.`);

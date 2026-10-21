@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from continuum.workspace import WorkspaceError, safe_file_path, should_ignore_path, read_text_file
+from continuum.workspace import is_automation_path, WorkspaceError, safe_file_path, should_ignore_path, read_text_file
 
 
 class WorkspaceSafetyTests(unittest.TestCase):
@@ -48,6 +48,15 @@ class WorkspaceSafetyTests(unittest.TestCase):
             target.write_bytes(b"\x00\x01")
             with self.assertRaises(WorkspaceError):
                 read_text_file(target)
+
+
+
+class AutomationPathTests(unittest.TestCase):
+    def test_ci_hook_and_editor_task_paths_are_flagged(self):
+        for path in (".github/workflows/ci.yml", ".husky/pre-commit", ".vscode/tasks.json", "pkg/.githooks/x", ".gitmodules"):
+            self.assertTrue(is_automation_path(path), path)
+        self.assertFalse(is_automation_path("docs/github.md"))
+        self.assertFalse(is_automation_path("src/main.py"))
 
 
 if __name__ == "__main__":

@@ -36,11 +36,10 @@ The installer is written to `apps/theia/release/`. GitHub Actions can build and 
 - The existing React dashboard in `apps/web` remains deployed from the Vercel project root `apps/web`.
 - Supabase continues to own Auth, shared projects, tasks, agent sessions/messages, RLS and Realtime.
 - `apps/web/api/agents` continues to orchestrate hosted model calls. OpenAI/Groq/OpenRouter credentials remain only in Vercel server environment variables.
-- **CONTINUUM → Open Cloud Panel** opens the integrated view for Supabase sign-in, RLS-scoped project selection, durable agent sessions, realtime conversation/status updates and one-step Vercel agent runs.
+- **CONTINUUM → Open Cloud Panel** opens the integrated view for Supabase sign-in, RLS-scoped project selection, durable agent sessions, shared conversation history and one-step Vercel agent runs.
 - **CONTINUUM → Open Cloud Dashboard** remains available as a link to the existing deployed dashboard.
 - The panel saves only the Supabase project URL and public publishable/anon client key in local desktop storage. Supabase owns authentication and RLS; provider keys remain server-side on Vercel.
 - Agent context is bounded before sending. Proposed changes are displayed for review; the panel does not silently write proposals into local folders.
-- The Cloud panel displays its Supabase Realtime connection state and provides a reconnect control if the subscription fails or times out. Manual project/session refresh remains available when live sync is disconnected.
 
 ## Branding and trust
 

@@ -27,7 +27,7 @@ from lexilla.pyside6_scintilla import set_lexer
 
 from continuum.cloud import CloudClient, CloudError
 from continuum.workspace import (
-    MAX_TEXT_BYTES, WorkspaceError, read_text_file, safe_file_path, should_ignore_path
+    MAX_TEXT_BYTES, WorkspaceError, is_automation_path, read_text_file, safe_file_path, should_ignore_path
 )
 
 APP_VERSION = "0.3.0"
@@ -2110,7 +2110,9 @@ class ContinuumWindow(QMainWindow):
             answer = QMessageBox.question(
                 self, "Review proposed changes",
                 "Apply " + str(len(files)) + " proposed file(s) to\n" + str(self.workspace) +
-                "?\n\nAll paths and cloud locks will be checked first. Existing files will be backed up. "
+                ":\n\n" + "\n".join("  • " + str(item.get("path", "?")) for item in files[:15] if isinstance(item, dict)) +
+                ("\n  … and " + str(len(files) - 15) + " more" if len(files) > 15 else "") +
+                "\n\nAll paths and cloud locks will be checked first. Existing files will be backed up. "
                 "If any write fails, already changed files will be restored. This will not commit, push, or deploy."
             )
             if answer != QMessageBox.StandardButton.Yes:
@@ -2128,6 +2130,8 @@ class ContinuumWindow(QMainWindow):
                 if not relative or relative in seen:
                     raise WorkspaceError("The proposal contains an empty or duplicate path: " + relative)
                 seen.add(relative)
+                if is_automation_path(relative):
+                    raise WorkspaceError("Agent proposals cannot modify CI, git-hook, or editor-task files: " + relative)
                 target = safe_file_path(self.workspace, relative)
                 self.cloud.assert_file_editable(project_id, relative)
                 encoded = item["content"].encode("utf-8")

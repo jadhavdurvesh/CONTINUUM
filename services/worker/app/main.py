@@ -27,6 +27,13 @@ MAX_OUTPUT = 30_000
 IGNORED = {".git", "node_modules", ".venv", "venv", "__pycache__", ".next", "dist", "build", "coverage", ".pytest_cache"}
 SECRETS = {".env", ".env.local", ".env.production", ".env.development", ".npmrc", ".pypirc", "credentials.json", "secrets.json", "id_rsa", "id_ed25519"}
 SECRET_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".keystore"}
+# Paths that execute automatically (CI, git hooks, editor tasks). Agent proposals must never write here.
+AUTOMATION_DIRS = {".github", ".husky", ".githooks", ".vscode", ".gitlab"}
+AUTOMATION_FILES = {".gitattributes", ".gitmodules", ".gitlab-ci.yml"}
+
+def is_automation_path(path: str) -> bool:
+    parts = [p.lower() for p in path.replace("\\", "/").split("/")]
+    return any(p in AUTOMATION_DIRS for p in parts) or parts[-1] in AUTOMATION_FILES
 origins = [x.strip().rstrip("/") for x in os.getenv("CONTINUUM_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if x.strip()]
 APP.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST", "PUT", "OPTIONS"], allow_headers=["Authorization", "Content-Type", "X-Continuum-Project-Id", "X-Continuum-User-Token"], allow_private_network=True, max_age=600)
 
@@ -82,12 +89,34 @@ def resolve_path(root: Path, raw: str, must_exist: bool = False) -> Path:
 
 def run_process(args: list[str], root: Path, timeout: int = 30) -> dict:
     try:
-        result = subprocess.run(args, cwd=root, shell=False, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", timeout=timeout, env={**os.environ, "CI": "1", "GIT_TERMINAL_PROMPT": "0"})
+        result = subprocess.run(args, cwd=root, shell=False, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", timeout=timeout, env={**{k: v for k, v in os.environ.items() if not k.upper().startswith("CONTINUUM_")}, "CI": "1", "GIT_TERMINAL_PROMPT": "0"})
         return {"exit_code": result.returncode, "output": result.stdout[-MAX_OUTPUT:], "truncated": len(result.stdout) > MAX_OUTPUT}
     except FileNotFoundError:
         return {"exit_code": 127, "output": "Executable not found: " + args[0], "truncated": False}
     except subprocess.TimeoutExpired:
         return {"exit_code": 124, "output": "Command timed out after " + str(timeout) + " seconds.", "truncated": True}
+
+_PYTEST_FLAGS = {"-q", "-x", "-v", "-vv", "-s", "--lf", "--ff", "--co", "--collect-only", "--no-header", "-rA", "-ra"}
+_PYTEST_VALUE_FLAGS = ("--tb=", "--maxfail=", "-k=", "-m=")
+
+def _pytest_args_ok(args: list[str]) -> bool:
+    """Allow only test paths and a few harmless flags.
+
+    Options such as --basetemp (which deletes the directory it points at), -p/-c/--rootdir/-o
+    (which load code or redirect configuration) must not be reachable from the browser.
+    """
+    for arg in args:
+        if arg.startswith("-"):
+            if arg in _PYTEST_FLAGS or arg.startswith(_PYTEST_VALUE_FLAGS):
+                continue
+            return False
+        normalized = arg.replace("\\", "/")
+        node = normalized.split("::", 1)[0]
+        if (not node or node.startswith("/") or re.match(r"^[A-Za-z]:", node)
+                or any(part in {"..", "."} for part in node.split("/"))
+                or any(ord(c) < 32 for c in arg)):
+            return False
+    return True
 
 def checked_command(command: list[str]) -> tuple[list[str], int]:
     if not command or len(command) > 20 or any(not a or len(a) > 500 for a in command):
@@ -97,7 +126,7 @@ def checked_command(command: list[str]) -> tuple[list[str], int]:
     exe, args = Path(command[0]).name.lower(), command[1:]
     if exe in {"npm", "pnpm", "yarn"} and ((len(args) == 2 and args[0] == "run" and args[1] in {"build", "test", "lint", "typecheck"}) or args in (["build"], ["test"], ["lint"])):
         return [exe, *args], 45
-    if exe == "pytest" and all(".." not in Path(a).parts and not a.startswith("/") for a in args):
+    if exe == "pytest" and _pytest_args_ok(args):
         return [exe, *args], 45
     if exe in {"python", "python3"} and args in (["-m", "pytest"], ["-m", "compileall", "."]):
         return [exe, *args], 45
@@ -233,13 +262,13 @@ def local_context_files(root: Path, focus_paths: list[str]) -> tuple[str, list[s
         if not content.strip():
             continue
         if len(content.encode('utf-8')) > remaining:
-            content = content[:max(0, remaining // 2)] + '\\n[context excerpt truncated]'
-        excerpts.append('FILE: ' + path + '\\n' + content)
+            content = content[:max(0, remaining // 2)] + '\n[context excerpt truncated]'
+        excerpts.append('FILE: ' + path + '\n' + content)
         included.append(path)
         remaining -= len(content.encode('utf-8'))
         if remaining <= 0:
             break
-    return '\\n\\n'.join(excerpts), included
+    return '\n\n'.join(excerpts), included
 
 def build_agent_prompt(session: dict, messages: list[dict], repo_context: str, inventory: list[str]) -> str:
     role = session.get('current_agent') or 'planner'
@@ -251,21 +280,21 @@ def build_agent_prompt(session: dict, messages: list[dict], repo_context: str, i
     }.get(role, 'Work carefully on the engineering goal.')
     history = []
     for item in messages[-18:]:
-        history.append(str(item.get('role','user')).upper() + ':\\n' + str(item.get('content',''))[:7000])
+        history.append(str(item.get('role','user')).upper() + ':\n' + str(item.get('content',''))[:7000])
     parts = [
         'You are the ' + role.upper() + ' role in CONTINUUM, a collaborative engineering workspace.',
         'Role objective: ' + role_instructions,
-        'GOAL:\\n' + str(session.get('goal',''))[:20000],
-        'CONVERSATION HISTORY (durable shared context; do not ask the user to repeat it):\\n' + ('\\n\\n'.join(history) or '(no prior messages)'),
-        'LOCAL REPOSITORY FILE INVENTORY:\\n' + '\\n'.join(inventory[:160]),
-        'SELECTED REPOSITORY CONTEXT:\\n' + (repo_context or '(No source files were selected or readable.)'),
+        'GOAL:\n' + str(session.get('goal',''))[:20000],
+        'CONVERSATION HISTORY (durable shared context; do not ask the user to repeat it):\n' + ('\n\n'.join(history) or '(no prior messages)'),
+        'LOCAL REPOSITORY FILE INVENTORY:\n' + '\n'.join(inventory[:160]),
+        'SELECTED REPOSITORY CONTEXT:\n' + (repo_context or '(No source files were selected or readable.)'),
         'Return exactly one valid JSON object with summary (string), files (array of {path,content}), next_role (planner|coder|reviewer|qa), status (needs_review|queued|completed), and review_notes (string).',
         'Max 12 full-file changes. Use safe relative paths only. Never include secrets, environment files, private keys, generated folders, .git, or dependency directories.',
         'Never claim to have applied changes, committed code, deployed, or run tests. Return proposals only; the human must click Apply.',
         'Do not return shell commands and do not execute anything. Tests are run separately through allowed worker commands.',
         'Use existing history as context and continue the work. Avoid repeating the full plan unnecessarily.'
     ]
-    return '\\n\\n'.join(parts)
+    return '\n\n'.join(parts)
 
 def relay_agent_status() -> dict:
     try:
@@ -396,6 +425,8 @@ async def run_agent_step(body: AgentStepRequest, x_continuum_project_id: Annotat
         total_bytes = 0
         for item in proposal["files"]:
             path = safe_path(item["path"])
+            if is_automation_path(path):
+                raise HTTPException(403, "The agent proposed a CI, git-hook, or editor-task file, which is blocked: " + path)
             byte_count = len(item["content"].encode("utf-8"))
             if byte_count > MAX_FILE_BYTES:
                 raise HTTPException(413, "A proposed file exceeds the 1.5 MB limit.")
@@ -443,6 +474,8 @@ def apply_agent_proposal(body: AgentApplyRequest, x_continuum_project_id: Annota
     total_bytes = 0
     for item in proposal["files"]:
         path = safe_path(item["path"])
+        if is_automation_path(path):
+            raise HTTPException(403, "Agent proposals cannot modify CI, git-hook, or editor-task files: " + path)
         content = item["content"]
         size = len(content.encode("utf-8"))
         total_bytes += size

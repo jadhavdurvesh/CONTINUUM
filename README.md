@@ -24,7 +24,7 @@ Cloud functionality remains separate and unchanged: Supabase provides authentica
 
 - **Desktop migration:** apps/theia — Eclipse Theia-based candidate desktop IDE; apps/native — current PySide6 desktop retained during validation.
 - **Cloud dashboard:** apps/web — React + TypeScript + Vite; deploy to Vercel with root directory apps/web.
-- **Cloud agent APIs:** apps/web/api/agents — authenticated Vercel functions; provider keys live only in Vercel.
+- **Cloud agent APIs:** apps/web/api/agents — authenticated Vercel functions; shared helpers live in apps/web/api/_lib (underscore = not deployed as an endpoint); provider keys live only in Vercel.
 - **Shared database:** hosted Supabase Auth, PostgreSQL, RLS, and Realtime. SQL migrations are in supabase/migrations.
 - **Local Python worker:** services/worker remains an optional developer-only companion for the legacy browser Local IDE; the native app does not need it for normal local editing or cloud agent calls.
 
@@ -46,6 +46,7 @@ supabase functions deploy invite-project-member
    - SUPABASE_URL
    - SUPABASE_PUBLISHABLE_KEY (or SUPABASE_ANON_KEY)
    - At least one model-provider key: OPENAI_API_KEY, GROQ_API_KEY, or OPENROUTER_API_KEY.
+   - CONTINUUM_DASHBOARD_ORIGIN — your dashboard origin(s), comma-separated (the hard-coded production URL was removed).
    - Optional model settings: OPENAI_MODEL, OPENAI_BASE_URL, GROQ_MODEL, OPENROUTER_MODEL.
 4. Use the stable Production URL of the Vercel deployment for the desktop release configuration.
 5. Configure Supabase Auth email delivery and redirect URLs. Keep signup/invitation policies restricted to the intended workspace.
