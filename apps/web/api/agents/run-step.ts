@@ -1,3 +1,5 @@
+import { setAgentCors } from "./cors";
+
 type AgentRole = "planner" | "coder" | "reviewer" | "qa";
 type AgentPayload = { summary: string; files: { path: string; content: string }[]; next_role: AgentRole; status: "needs_review" | "completed"; review_notes?: string };
 type ContextFile = { path: string; content: string };
@@ -98,6 +100,8 @@ async function askProvider(prompt: string): Promise<{ text: string; provider: st
 }
 
 export default async function handler(req: any, res: any) {
+  if (!setAgentCors(req, res)) return send(res, 403, { error: "Origin is not allowed." });
+  if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return send(res, 405, { error: "Method not allowed." });
