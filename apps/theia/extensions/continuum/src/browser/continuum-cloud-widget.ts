@@ -75,6 +75,7 @@ export class ContinuumCloudWidget extends ReactWidget {
   override dispose(): void {
     this.disposed = true;
     this.authSubscription?.unsubscribe();
+    if (this.client) void this.client.auth.stopAutoRefresh();
     super.dispose();
   }
 
