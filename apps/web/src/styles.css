@@ -295,3 +295,23 @@
 :root[data-theme="dark"] .appearance-settings { background: #242722; border-color: #3a3d35; }
 :root[data-theme="dark"] .appearance-copy strong { color: #eee9df; }
 :root[data-theme="dark"] .appearance-copy span { color: #aaa597; }
+
+/* Evidence board */
+.evidence-board{display:flex;flex-direction:column;gap:13px}
+.evidence-metrics{margin:14px 0 0}
+.evidence-metrics .metric-value small{font-size:13px;color:#9b968a;margin-left:2px}
+.evidence-section .protected-row,.evidence-task{border-top:1px solid #f0ede5}
+.evidence-icon{background:#e8ecd9;color:#68784b}
+.evidence-task{padding:11px 0}.evidence-task-head{display:flex;align-items:center;gap:10px}
+.evidence-pill{display:inline-flex;align-items:center;gap:5px;font:500 9px 'DM Mono',monospace;padding:4px 7px;border-radius:4px;background:#eeece4;color:#777266}
+.evidence-pill.ok{background:#e7ecd9;color:#5f7243}.evidence-pill.warn{background:#f8e2d8;color:#b0452c}
+.evidence-detail{display:flex;flex-direction:column;gap:11px;margin:12px 0 4px 2px;padding:13px;border:1px solid #e8e3d8;border-radius:7px;background:#f8f5ed}
+.evidence-blockers{margin:0;padding-left:17px;font-size:10px;line-height:1.8;color:#a8402b}.evidence-ok{margin:0;font-size:10px;color:#5f7243}
+.evidence-cases{display:flex;flex-wrap:wrap;gap:6px}
+.evidence-inline-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 4px}
+.evidence-inline-form input,.evidence-inline-form select,.evidence-label select{height:32px;border:1px solid #ded8cb;border-radius:5px;background:#fffefa;padding:0 9px;color:#38382f;font-size:10px}
+.evidence-inline-form input{flex:1;min-width:180px}
+.evidence-label{display:flex;flex-direction:column;gap:6px;font-size:10px;font-weight:600;color:#56564b;max-width:420px}
+.evidence-actions{display:flex;gap:8px;flex-wrap:wrap}.evidence-empty,.evidence-footnote{font-size:10px;color:#918b7e;margin:14px 0 0}
+:root[data-theme="dark"] .evidence-detail{background:#23241f;border-color:#34362f}
+:root[data-theme="dark"] .evidence-inline-form input,:root[data-theme="dark"] .evidence-inline-form select,:root[data-theme="dark"] .evidence-label select{background:#1b1c18;border-color:#3a3c34;color:#e6e3d8}

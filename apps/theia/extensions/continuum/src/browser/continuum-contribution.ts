@@ -2,7 +2,7 @@ import { injectable, inject } from '@theia/core/shared/inversify';
 import {
   Command, CommandContribution, CommandRegistry, MenuContribution, MenuModelRegistry, MessageService
 } from '@theia/core/lib/common';
-import { ApplicationShell, CommonMenus, OpenerService, WidgetManager, open } from '@theia/core/lib/browser';
+import { ApplicationShell, CommonMenus, OpenerService, WidgetManager } from '@theia/core/lib/browser';
 import { ContinuumCloudWidget } from './continuum-cloud-widget';
 import URI from '@theia/core/lib/common/uri';
 
@@ -55,7 +55,7 @@ export class ContinuumCommandContribution implements CommandContribution, MenuCo
     registry.registerCommand(OpenCloudWorkspaceCommand, {
       execute: async () => {
         try {
-          await open(this.openerService, new URI(CLOUD_WORKSPACE_URL));
+          await this.openerService.open(new URI(CLOUD_WORKSPACE_URL));
         } catch {
           this.messageService.error(
             'Could not open the CONTINUUM cloud dashboard. Check your network connection and deployment URL.'

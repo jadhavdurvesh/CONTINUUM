@@ -61,3 +61,6 @@
 - [ ] Backups and restore drills
 - [ ] Advanced analytics
 - [ ] Desktop shell after the worker workflow is proven
+
+
+> See [engineering-os-design.md](engineering-os-design.md) for the full layered design, the evidence-gated completion model, and milestones M1–M6 (M1 is built).
