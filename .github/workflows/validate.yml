@@ -9,28 +9,48 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   web:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
       - name: Install web dependencies
         working-directory: apps/web
-        run: npm install
-      - name: Type-check and build dashboard
+        run: npm ci
+      - name: Type-check (dashboard + API functions) and build
         working-directory: apps/web
         run: npm run build
-      - name: Transpile-check Vercel API functions
+      - name: Test Vercel API helpers (CORS, proposal validation)
         working-directory: apps/web
-        run: |
-          npx esbuild api/agents/status.ts --platform=node --format=esm --outfile=/tmp/agents-status.mjs
-          npx esbuild api/agents/run-step.ts --platform=node --format=esm --outfile=/tmp/agents-run-step.mjs
-          npx esbuild api/agents/cors.ts --platform=node --format=esm --outfile=/tmp/agents-cors.mjs
-          npx esbuild scripts/test-agent-cors.ts --bundle --platform=node --format=esm --outfile=/tmp/test-agent-cors.mjs
-          node /tmp/test-agent-cors.mjs
+        run: npm run test:api
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply migrations and run SQL tests
+        env:
+          PGURL: postgres://postgres:postgres@localhost:5432/postgres
+        run: supabase/tests/run.sh
 
   theia-config:
     runs-on: ubuntu-latest

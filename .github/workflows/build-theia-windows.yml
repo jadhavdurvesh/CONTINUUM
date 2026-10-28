@@ -20,11 +20,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Set up Python for native Node modules
-        id: setup-python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
       - name: Enable Yarn Classic
         shell: pwsh
         run: |
@@ -35,9 +30,6 @@ jobs:
         run: node scripts/validate-config.mjs
         working-directory: apps/theia
       - name: Install Theia workbench dependencies
-        env:
-          PYTHON: ${{ steps.setup-python.outputs.python-path }}
-          npm_config_python: ${{ steps.setup-python.outputs.python-path }}
         run: yarn install --network-timeout 600000
         working-directory: apps/theia
       - name: Build CONTINUUM Theia IDE and package NSIS installer

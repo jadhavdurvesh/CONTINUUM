@@ -16,15 +16,12 @@ permissions:
 jobs:
   windows-installer:
     runs-on: windows-latest
-    env:
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-      CONTINUUM_CLOUD_API_URL: ${{ secrets.CONTINUUM_CLOUD_API_URL }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
           cache: pip
           cache-dependency-path: apps/native/requirements-build.txt
       - name: Install native app and packaging dependencies
@@ -41,6 +38,10 @@ jobs:
       - name: Generate release cloud configuration from repository secrets
         working-directory: apps/native
         shell: pwsh
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          CONTINUUM_CLOUD_API_URL: ${{ secrets.CONTINUUM_CLOUD_API_URL }}
         run: |
           python generate_config.py
           if ($LASTEXITCODE -ne 0) { throw "Release cloud configuration failed. Add SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, and CONTINUUM_CLOUD_API_URL to GitHub Actions repository secrets." }
