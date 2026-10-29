@@ -50,7 +50,14 @@ jobs:
       - name: Apply migrations and run SQL tests
         env:
           PGURL: postgres://postgres:postgres@localhost:5432/postgres
-        run: supabase/tests/run.sh
+        run: bash supabase/tests/run.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Dashboard queries end to end (PostgREST + JWT + RLS)
+        env:
+          PGURL: postgres://postgres:postgres@localhost:5432/postgres
+        run: bash supabase/tests/api-smoke/run.sh
 
   theia-config:
     runs-on: ubuntu-latest
