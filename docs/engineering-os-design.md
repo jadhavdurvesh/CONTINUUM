@@ -10,7 +10,7 @@ This document turns the product vision into build-ready design. Status markers: 
 | # | Layer | Responsibility | Status |
 |---|---|---|---|
 | 1 | Desktop engineering environment (Theia: editor, terminal, Git, debug) | Where engineers touch real files | 🟡 candidate exists; installer unverified |
-| 2 | CONTINUUM product experience (dashboard, cloud panel, agent console, **Evidence**) | Workflows that make it more than an IDE | 🟡 dashboard + Evidence ✅; Theia panel early |
+| 2 | CONTINUUM product experience (dashboard: **Plan, Evidence, Quality, Releases, Knowledge**; cloud panel; agent console) | Workflows that make it more than an IDE | 🟡 project-management modules ✅; Theia panel early |
 | 3 | Agent orchestration (Planner/Coder/Reviewer/QA, routing, checkpoints) | Coordinate AI work and handoffs | 🟡 single explicit step ✅; scheduler/handoff ⬜ |
 | 4 | Shared project intelligence (Supabase: Auth, Postgres, RLS, Realtime) | One governed source of truth | ✅ incl. evidence model (M1) |
 | 5 | Execution and evidence (workers, builds, tests, CI, artifacts) | Verify work actually happened | 🟡 manual evidence ✅; trusted worker evidence ⬜ |
@@ -89,17 +89,48 @@ stateDiagram-v2
 
 ## 6. Milestones
 
-### M1 — Evidence & traceability ✅ (this change)
+### M1 — Evidence & traceability ✅
 DB model, gates, `project_health`, `task_completion_status`, Evidence page (command center, traceability, readiness, record test/review/complete/waive). 29 SQL assertions on real Postgres + a CI job.
 
-### M2 — Workspace bridge (next)
-*Goal:* an agent step uses the **open local workspace**, and approved changes land in it — nothing uploads silently.
-- Theia extension: "Select context" (open editors + chosen files + diff) → bounded snippets (≤12 files, ≤150 KB, secret/automation paths excluded, shown to the user *before* sending).
-- Proposal review view: per-file diff, review notes, per-file accept; backups under `.continuum/backups/`; refuse protected paths (already enforced server- and client-side).
-- After apply, the panel offers "Run tests" and records the result as evidence on the task.
-- Acceptance: a recorded demo run where one task goes requirement → proposal → apply → local test → evidence → human approval → done, with no manual DB edits.
+### M1.5 — Project-management modules ✅ (built and tested)
+The dashboard now covers the "engineering workspace" table from the vision, all backed by database-enforced rules:
 
-### M3 — Trusted execution
+| Module | Page | What it does | Enforced in the database |
+|---|---|---|---|
+| Work management | **Plan** | Milestones with computed progress and at-risk detection, workstreams, assignees, due dates, subtasks, task dependencies | no cross-project references; assignees must be members; no hierarchy or dependency loops; a task cannot complete while dependencies/subtasks are open; a milestone cannot complete with open tasks |
+| Governance & evidence | **Evidence** | Command center, requirement traceability, completion readiness, record tests/reviews | M1 gates |
+| Quality | **Quality** | Test cases, results, requirement coverage gaps, defect/risk register | open high-severity defects block task completion and releases; only owners accept a risk |
+| Release management | **Releases** | Scope a release to requirements, readiness check, generated notes, owner-only release with commit SHA | not ready unless all scoped requirements are verified and no serious defect is open; released scope is frozen |
+| Documentation & knowledge | **Documentation** | Markdown documents (safe renderer), full version history, restore, optimistic-concurrency saves, ADR-style decisions | stale saves rejected (HTTP 409); only owners accept decisions; accepted decisions are immutable (supersede instead) |
+| Project graph | all pages | Typed links between tasks, requirements, documents, decisions, defects, tests, milestones and releases, visible from both ends | links must stay inside the project; deleting an item removes its links |
+
+Verification: 91 SQL assertions on real PostgreSQL (3 suites), a 78-check end-to-end run of the dashboard's real queries through PostgREST with signed JWTs and RLS (`supabase/tests/api-smoke/run.sh`), 28 worker tests (incl. the bridge's preview/apply/staleness rules), markdown-renderer injection tests, and strict TypeScript builds. All run in CI.
+
+### M2 — Workspace bridge ✅ (worker + dashboard path; Theia panel next)
+*Goal:* an agent step uses the **real local checkout**, and nothing is sent or written without you seeing it first. Built as the **Workspace Bridge** page plus new worker endpoints, so it is testable today and the Theia panel can reuse the same endpoints.
+
+| Step | What happens | Safety |
+|---|---|---|
+| 1 Task & session | pick an open task, create an agent session with a goal and up to 12 context paths | RLS; sessions belong to the task |
+| 2 Context preview | `POST /api/worker/agents/context` lists exactly which files (and bytes) will be sent | secret-like, ignored, missing, empty and >18 KB files are never sent; budget shown |
+| 3 Agent step | worker runs one step with that context | proposal validated server-side |
+| 4 Review & apply | `POST /agents/preview` returns a per-file unified diff (new / modified / unchanged / blocked) and a base hash; you tick files; `apply-proposal` writes only those | refuses if a file changed after review (409); CI/hook/editor-task paths and locked paths blocked; rollback on failure; audit message |
+| 5 Verify | run allowed checks locally (`npm test`, `npm run build`, `pytest`…) | allow-listed commands only; worker secrets scrubbed from child env |
+| 6 Evidence | "Record as evidence" stores result, commit SHA (`/git/head`), duration, log excerpt, and notes uncommitted changes | recorded as yourself, immutable, feeds the completion gate |
+
+Still ⬜: the same flow as a Theia side panel, and worker-signed evidence (M3).
+
+### M2.5 — Workspace hub ✅
+| Module | What it does |
+|---|---|
+| **My Work** | one call (`my_work`) for tasks assigned to me (overdue / waiting-on-prerequisite flagged), work waiting for *my* review (evidence-based: passing run, no review from me since), my open defects, and — for owners — decisions to decide |
+| **Search (Ctrl/⌘ K)** | `search_project` over tasks, requirements (incl. keys), documents (with a snippet around the match), decisions, defects, milestones, releases and tests; LIKE characters escaped, minimum 2 characters, RLS-scoped |
+| **Roadmap** | timeline of dated milestones on the Plan page with a today marker and at-risk colouring |
+
+### M2b — Theia side panel (next, small)
+Reuse the endpoints above from the Theia cloud panel: "Select context" from open editors, the same diff review and per-file apply, then "Run tests" → evidence. Acceptance: one task goes requirement → proposal → apply → local test → evidence → human approval → done inside Theia, with no manual DB edits.
+
+### M3 — Trusted execution (next)
 *Problem:* manual evidence is honest-user evidence. A leased worker makes it verifiable.
 - `worker_leases(task_id, worker_id, expires_at)`; a worker records runs through a `SECURITY DEFINER` RPC that stamps `actor_type='system'`, the worker identity, command, exit code, commit SHA, log hash.
 - Gate option `evidence_source = 'worker'` per project: manual runs no longer count.

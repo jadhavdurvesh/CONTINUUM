@@ -146,3 +146,139 @@ def test_child_processes_do_not_inherit_worker_secrets(tmp_path: Path, monkeypat
     monkeypatch.setenv("CONTINUUM_WORKER_TOKEN", "super-secret-" + "x" * 40)
     result = worker_module.run_process(["python3", "-c", "import os;print(os.environ.get('CONTINUUM_WORKER_TOKEN','absent'))"], tmp_path, 10)
     assert result["output"].strip() == "absent"
+
+
+# ---------------------------------------------------------------------------------------------
+# Workspace bridge: context preview, diff preview, selective + staleness-checked apply
+# ---------------------------------------------------------------------------------------------
+import json as _json
+
+PROJECT = "11111111-1111-1111-1111-111111111111"
+SESSION = "22222222-2222-2222-2222-222222222222"
+CLOUD_HEADERS = {"X-Continuum-Project-Id": PROJECT, "X-Continuum-User-Token": "user-jwt"}
+
+
+def bridge_headers():
+    return {**auth(), **CLOUD_HEADERS}
+
+
+@pytest.fixture
+def cloud(monkeypatch: pytest.MonkeyPatch):
+    state = {"status": "needs_review", "focus": ["hello.py", ".env", "missing.py"], "posted": []}
+    proposal = {"summary": "tweak", "next_role": "reviewer", "status": "needs_review", "files": [
+        {"path": "hello.py", "content": "print('hello world')\n"},
+        {"path": "src/new.py", "content": "VALUE = 1\n"},
+        {"path": "same.txt", "content": "unchanged\n"},
+    ]}
+    state["proposal"] = proposal
+    monkeypatch.setattr(worker_module, "current_cloud_user", lambda project_id, token: "user-1")
+    monkeypatch.setattr(worker_module, "load_agent_session", lambda project_id, session_id, token: {"status": state["status"], "focus_paths": state["focus"]})
+    monkeypatch.setattr(worker_module, "session_messages", lambda project_id, session_id, token: [
+        {"role": "user", "content": "go"}, {"role": "assistant", "content": _json.dumps(state["proposal"])}])
+    monkeypatch.setattr(worker_module, "cloud_json", lambda path, token, method="GET", payload=None, **kw: state["posted"].append((path, payload)) or [])
+    return state
+
+
+def body(**extra):
+    return {"project_id": PROJECT, "session_id": SESSION, **extra}
+
+
+def test_context_preview_lists_only_files_that_would_be_sent(cloud):
+    response = client.post("/api/worker/agents/context", json=body(), headers=bridge_headers())
+    assert response.status_code == 200
+    data = response.json()
+    assert [item["path"] for item in data["files"]] == ["hello.py"]          # .env (secret) and missing.py are never sent
+    assert set(data["skipped"]) == {".env", "missing.py"}
+    assert data["total_bytes"] > 0 and data["using_defaults"] is False
+
+
+def test_preview_requires_signed_in_project_session(cloud):
+    assert client.post("/api/worker/agents/preview", json=body(), headers=auth()).status_code == 401
+    wrong = {**auth(), "X-Continuum-Project-Id": "33333333-3333-3333-3333-333333333333", "X-Continuum-User-Token": "t"}
+    assert client.post("/api/worker/agents/preview", json=body(), headers=wrong).status_code == 401
+
+
+def test_preview_shows_diffs_and_never_writes(cloud, tmp_path: Path):
+    (tmp_path / "same.txt").write_text("unchanged\n", encoding="utf-8")
+    before = (tmp_path / "hello.py").read_text(encoding="utf-8")
+    response = client.post("/api/worker/agents/preview", json=body(), headers=bridge_headers())
+    assert response.status_code == 200
+    by_path = {item["path"]: item for item in response.json()["files"]}
+    assert by_path["hello.py"]["status"] == "modified" and by_path["hello.py"]["additions"] == 1 and by_path["hello.py"]["deletions"] == 1
+    assert "+print('hello world')" in by_path["hello.py"]["diff"]
+    assert by_path["hello.py"]["base_hash"]
+    assert by_path["src/new.py"]["status"] == "new" and by_path["src/new.py"]["base_hash"] is None
+    assert by_path["same.txt"]["status"] == "unchanged"
+    assert (tmp_path / "hello.py").read_text(encoding="utf-8") == before and not (tmp_path / "src").exists()
+
+
+def test_preview_flags_blocked_files_instead_of_failing(cloud, monkeypatch: pytest.MonkeyPatch):
+    cloud["proposal"]["files"].append({"path": "pkg/readme.md", "content": "x"})
+    def deny(project_id, path, token):
+        if path == "pkg/readme.md":
+            raise HTTPException(423, "pkg/readme.md is locked by the project owner.")
+    monkeypatch.setattr(worker_module, "assert_path_editable", deny)
+    response = client.post("/api/worker/agents/preview", json=body(), headers=bridge_headers())
+    blocked = {item["path"]: item["blocked"] for item in response.json()["files"]}
+    assert "locked" in blocked["pkg/readme.md"] and blocked["hello.py"] is None
+
+
+def test_apply_selected_files_only_and_posts_audit_message(cloud, tmp_path: Path):
+    preview = client.post("/api/worker/agents/preview", json=body(), headers=bridge_headers()).json()
+    hashes = {item["path"]: item["base_hash"] for item in preview["files"]}
+    response = client.post("/api/worker/agents/apply-proposal", json=body(paths=["src/new.py"], base_hashes=hashes), headers=bridge_headers())
+    assert response.status_code == 200, response.text
+    assert response.json()["applied"] == ["src/new.py"]
+    assert (tmp_path / "src" / "new.py").read_text(encoding="utf-8") == "VALUE = 1\n"
+    assert (tmp_path / "hello.py").read_text(encoding="utf-8") == "print('hello')\n"      # not selected -> untouched
+    path, payload = cloud["posted"][-1]
+    assert path.endswith("/agent_messages") and payload["actor_id"] == "user-1" and payload["role"] == "tool"
+
+
+def test_apply_without_selection_keeps_old_behaviour(cloud, tmp_path: Path):
+    response = client.post("/api/worker/agents/apply-proposal", json=body(), headers=bridge_headers())
+    assert response.status_code == 200, response.text
+    assert set(response.json()["applied"]) == {"hello.py", "src/new.py", "same.txt"}
+
+
+def test_apply_refuses_a_file_that_changed_after_review(cloud, tmp_path: Path):
+    preview = client.post("/api/worker/agents/preview", json=body(), headers=bridge_headers()).json()
+    hashes = {item["path"]: item["base_hash"] for item in preview["files"]}
+    (tmp_path / "hello.py").write_text("print('edited by a human meanwhile')\n", encoding="utf-8")
+    response = client.post("/api/worker/agents/apply-proposal", json=body(paths=["hello.py"], base_hashes=hashes), headers=bridge_headers())
+    assert response.status_code == 409 and "changed after you reviewed" in response.json()["detail"]
+    assert "edited by a human meanwhile" in (tmp_path / "hello.py").read_text(encoding="utf-8")
+    # a new file appearing where the review saw none is also a change
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "new.py").write_text("OTHER = 2\n", encoding="utf-8")
+    assert client.post("/api/worker/agents/apply-proposal", json=body(paths=["src/new.py"], base_hashes=hashes), headers=bridge_headers()).status_code == 409
+
+
+def test_apply_requires_hash_for_every_selected_file(cloud):
+    response = client.post("/api/worker/agents/apply-proposal", json=body(paths=["hello.py"], base_hashes={}), headers=bridge_headers())
+    assert response.status_code == 409 and "out of date" in response.json()["detail"]
+
+
+def test_apply_rejects_unknown_empty_and_blocked_selection(cloud):
+    assert client.post("/api/worker/agents/apply-proposal", json=body(paths=["not-in-proposal.py"]), headers=bridge_headers()).status_code == 400
+    assert client.post("/api/worker/agents/apply-proposal", json=body(paths=[]), headers=bridge_headers()).status_code == 400
+    cloud["proposal"]["files"].append({"path": ".github/workflows/x.yml", "content": "on: push"})
+    assert client.post("/api/worker/agents/apply-proposal", json=body(paths=[".github/workflows/x.yml"]), headers=bridge_headers()).status_code == 403
+
+
+def test_apply_needs_a_proposal_in_review(cloud):
+    cloud["status"] = "completed"
+    assert client.post("/api/worker/agents/apply-proposal", json=body(), headers=bridge_headers()).status_code == 409
+
+
+def test_git_head_reports_commit_and_dirty_state(tmp_path: Path):
+    import subprocess
+    assert client.get("/api/worker/git/head", headers=auth()).json() == {"sha": None, "dirty": False}  # not a repository yet
+    env = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t", "PATH": __import__("os").environ["PATH"]}
+    for args in (["init", "-q"], ["add", "hello.py"], ["commit", "-q", "-m", "init"]):
+        subprocess.run(["git", *args], cwd=tmp_path, env=env, check=True)
+    clean = client.get("/api/worker/git/head", headers=auth()).json()
+    assert len(clean["sha"]) == 40 and clean["dirty"] is True        # .env/untracked files make it dirty
+    (tmp_path / "hello.py").write_text("changed\n", encoding="utf-8")
+    assert client.get("/api/worker/git/head", headers=auth()).json()["dirty"] is True
+    assert client.get("/api/worker/git/head").status_code == 401

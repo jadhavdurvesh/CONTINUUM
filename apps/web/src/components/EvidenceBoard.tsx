@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, ClipboardCheck, FlaskConical, Link2, RefreshCw, ShieldCheck, TriangleAlert } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { useStable } from "../lib/hooks";
 
 type Health = {
   tasks: { total: number; done: number; done_with_evidence: number; done_waived: number; done_without_requirement: number; blocked: number; in_review: number };
@@ -27,6 +28,7 @@ export default function EvidenceBoard({ projectId, userId, isOwner, onNotify, on
   const [busy, setBusy] = useState("");
   const [open, setOpen] = useState("");
   const [loading, setLoading] = useState(true);
+  const notify = useStable(onNotify);
 
   const load = useCallback(async () => {
     if (!supabase) return;
@@ -38,7 +40,7 @@ export default function EvidenceBoard({ projectId, userId, isOwner, onNotify, on
       supabase.from("requirements").select("id,key,title,status").eq("project_id", projectId).order("created_at", { ascending: true }).limit(200)
     ]);
     const firstError = healthResult.error ?? completionResult.error ?? taskResult.error ?? requirementResult.error;
-    if (firstError) onNotify(firstError.message);
+    if (firstError) notify(firstError.message);
     setHealth((healthResult.data as Health | null) ?? null);
     const byTask: Record<string, Completion> = {};
     for (const item of ((completionResult.data as Completion[] | null) ?? [])) if (item) byTask[item.task_id] = item;
@@ -46,7 +48,7 @@ export default function EvidenceBoard({ projectId, userId, isOwner, onNotify, on
     setTasks((taskResult.data as TaskLite[] | null) ?? []);
     setRequirements((requirementResult.data as Requirement[] | null) ?? []);
     setLoading(false);
-  }, [projectId, onNotify]);
+  }, [projectId, notify]);
 
   useEffect(() => { void load(); }, [load]);
 

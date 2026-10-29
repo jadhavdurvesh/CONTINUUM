@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Applies stubs + all migrations to a scratch Postgres database and runs the SQL tests.
-# Usage: PGURL=postgres://postgres@localhost/postgres supabase/tests/run.sh
+# Usage: PGURL=postgres://postgres@localhost/postgres bash supabase/tests/run.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ADMIN="${PGURL:-postgres://postgres:postgres@localhost:5432/postgres}"

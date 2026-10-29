@@ -221,6 +221,9 @@ class AgentStepRequest(BaseModel):
 class AgentApplyRequest(BaseModel):
     project_id: str = Field(min_length=36, max_length=36)
     session_id: str = Field(min_length=36, max_length=36)
+    # Optional: apply only these proposed files (default: all), and refuse if a local file changed since it was reviewed.
+    paths: list[str] | None = Field(default=None, max_length=12)
+    base_hashes: dict[str, str | None] | None = None
 def load_agent_session(project_id: str, session_id: str, access_token: str) -> dict:
     query = urlencode({'select':'*','id':'eq.' + session_id,'project_id':'eq.' + project_id,'limit':'1'})
     rows = cloud_json('/rest/v1/agent_sessions?' + query, access_token)
@@ -454,37 +457,136 @@ async def run_agent_step(body: AgentStepRequest, x_continuum_project_id: Annotat
         if isinstance(exc, HTTPException): raise
         raise HTTPException(502, "RELAY step failed. Session history remains saved; retry after fixing the reported issue.") from exc
 
-@APP.post("/api/worker/agents/apply-proposal", dependencies=[Depends(require_token)])
-def apply_agent_proposal(body: AgentApplyRequest, x_continuum_project_id: Annotated[str | None, Header()] = None, x_continuum_user_token: Annotated[str | None, Header()] = None) -> dict:
-    if not x_continuum_user_token or body.project_id != x_continuum_project_id:
+import hashlib as _hashlib
+import difflib as _difflib
+
+def _sha256(data: bytes | None) -> str | None:
+    return None if data is None else _hashlib.sha256(data).hexdigest()
+
+def _reviewable_files(body: AgentApplyRequest, project_header: str | None, user_token: str | None) -> tuple[str, list[dict]]:
+    """Load the session's latest proposal and describe each file against the local checkout, without writing anything.
+
+    Each entry carries `blocked` = (status, reason) when that file may not be applied (protected path, lock, size...).
+    """
+    if not user_token or body.project_id != project_header:
         raise HTTPException(401, "A signed-in project session is required.")
-    user_id = current_cloud_user(body.project_id, x_continuum_user_token)
-    session = load_agent_session(body.project_id, body.session_id, x_continuum_user_token)
+    user_id = current_cloud_user(body.project_id, user_token)
+    session = load_agent_session(body.project_id, body.session_id, user_token)
     if session.get("status") != "needs_review":
         raise HTTPException(409, "The agent session has no proposal awaiting review.")
-    messages = session_messages(body.project_id, body.session_id, x_continuum_user_token)
-    latest = next((item for item in reversed(messages) if item.get("role")=="assistant"), None)
-    if not latest: raise HTTPException(404, "No agent proposal was found.")
+    messages = session_messages(body.project_id, body.session_id, user_token)
+    latest = next((item for item in reversed(messages) if item.get("role") == "assistant"), None)
+    if not latest:
+        raise HTTPException(404, "No agent proposal was found.")
     from app.agent_runtime import parse_agent_payload
-    try: proposal = parse_agent_payload(latest.get("content",""))
-    except ValueError as exc: raise HTTPException(422, "The latest message is not a valid proposal.") from exc
-    if not proposal["files"]: raise HTTPException(400, "This agent response contains no file changes to apply.")
+    try:
+        proposal = parse_agent_payload(latest.get("content", ""))
+    except ValueError as exc:
+        raise HTTPException(422, "The latest message is not a valid proposal.") from exc
+    if not proposal["files"]:
+        raise HTTPException(400, "This agent response contains no file changes to apply.")
     root = root_path()
-    normalized = []
+    files: list[dict] = []
     total_bytes = 0
     for item in proposal["files"]:
         path = safe_path(item["path"])
-        if is_automation_path(path):
-            raise HTTPException(403, "Agent proposals cannot modify CI, git-hook, or editor-task files: " + path)
         content = item["content"]
         size = len(content.encode("utf-8"))
         total_bytes += size
-        if size > MAX_FILE_BYTES or total_bytes > 3000000: raise HTTPException(413, "Proposed file changes exceed the size limit.")
-        assert_path_editable(body.project_id, path, x_continuum_user_token)
+        blocked: tuple[int, str] | None = None
         target = resolve_path(root, path)
-        if target.exists() and not target.is_file(): raise HTTPException(400, "A proposed path is not a regular file: " + path)
-        normalized.append({"path":path,"target":target,"content":content})
-    backups = {item["path"]:(item["target"].read_bytes() if item["target"].exists() else None) for item in normalized}
+        if is_automation_path(path):
+            blocked = (403, "Agent proposals cannot modify CI, git-hook, or editor-task files: " + path)
+        elif size > MAX_FILE_BYTES or total_bytes > 3000000:
+            blocked = (413, "Proposed file changes exceed the size limit.")
+        elif target.exists() and not target.is_file():
+            blocked = (400, "A proposed path is not a regular file: " + path)
+        else:
+            try:
+                assert_path_editable(body.project_id, path, user_token)
+            except HTTPException as exc:
+                blocked = (exc.status_code, str(exc.detail))
+        old_bytes = target.read_bytes() if blocked is None and target.exists() else None
+        old_text = None
+        if old_bytes is not None:
+            try:
+                old_text = old_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                blocked = (400, "The existing file is not UTF-8 text: " + path)
+        files.append({"path": path, "target": target, "content": content, "blocked": blocked,
+                      "old_bytes": old_bytes, "old_text": old_text, "bytes": size})
+    return user_id, files
+
+@APP.post("/api/worker/agents/preview", dependencies=[Depends(require_token)])
+def preview_agent_proposal(body: AgentApplyRequest, x_continuum_project_id: Annotated[str | None, Header()] = None, x_continuum_user_token: Annotated[str | None, Header()] = None) -> dict:
+    """Read-only review: per-file status, line counts, a unified diff, and the hash to pass back on apply."""
+    out = []
+    _user, reviewable = _reviewable_files(body, x_continuum_project_id, x_continuum_user_token)
+    for item in reviewable:
+        old = (item["old_text"] or "").splitlines()
+        new = item["content"].splitlines()
+        diff_lines = list(_difflib.unified_diff(old, new, "a/" + item["path"], "b/" + item["path"], lineterm="", n=3))
+        additions = sum(1 for line in diff_lines if line.startswith("+") and not line.startswith("+++"))
+        deletions = sum(1 for line in diff_lines if line.startswith("-") and not line.startswith("---"))
+        if item["old_bytes"] is None:
+            status = "new"
+        elif item["old_text"] == item["content"]:
+            status = "unchanged"
+        else:
+            status = "modified"
+        truncated = len(diff_lines) > 400
+        out.append({"path": item["path"], "status": status, "additions": additions, "deletions": deletions,
+                    "bytes": item["bytes"], "base_hash": _sha256(item["old_bytes"]), "diff": "\n".join(diff_lines[:400]),
+                    "diff_truncated": truncated,
+                    "blocked": None if item["blocked"] is None else item["blocked"][1]})
+    return {"session_id": body.session_id, "files": out}
+
+@APP.post("/api/worker/agents/context", dependencies=[Depends(require_token)])
+def preview_agent_context(body: AgentApplyRequest, x_continuum_project_id: Annotated[str | None, Header()] = None, x_continuum_user_token: Annotated[str | None, Header()] = None) -> dict:
+    """Show exactly which local files the next agent step will send to the model, before anything leaves this machine."""
+    if not x_continuum_user_token or body.project_id != x_continuum_project_id:
+        raise HTTPException(401, "A signed-in project session is required.")
+    current_cloud_user(body.project_id, x_continuum_user_token)
+    session = load_agent_session(body.project_id, body.session_id, x_continuum_user_token)
+    focus = [str(item) for item in (session.get("focus_paths") or [])]
+    root = root_path()
+    text, included = local_context_files(root, focus)
+    files = []
+    for path in included:
+        try:
+            size = resolve_path(root, safe_path(path), True).stat().st_size
+        except (HTTPException, OSError):
+            size = 0
+        files.append({"path": path, "bytes": size})
+    skipped = [item for item in focus[:12] if item not in included]
+    return {"session_id": body.session_id, "files": files, "total_bytes": len(text.encode("utf-8")), "limit_bytes": 42000,
+            "using_defaults": not focus, "skipped": skipped,
+            "note": "Files that are missing, empty, over 18 KB, secret-like or ignored are never sent."}
+
+@APP.post("/api/worker/agents/apply-proposal", dependencies=[Depends(require_token)])
+def apply_agent_proposal(body: AgentApplyRequest, x_continuum_project_id: Annotated[str | None, Header()] = None, x_continuum_user_token: Annotated[str | None, Header()] = None) -> dict:
+    user_id, files = _reviewable_files(body, x_continuum_project_id, x_continuum_user_token)
+    selected = files
+    if body.paths is not None:
+        wanted = {safe_path(path) for path in body.paths}
+        if not wanted:
+            raise HTTPException(400, "Select at least one file to apply.")
+        unknown = wanted - {item["path"] for item in files}
+        if unknown:
+            raise HTTPException(400, "These files are not part of the proposal: " + ", ".join(sorted(unknown)))
+        selected = [item for item in files if item["path"] in wanted]
+    for item in selected:
+        if item["blocked"] is not None:
+            raise HTTPException(item["blocked"][0], item["blocked"][1])
+    if body.base_hashes is not None:
+        for item in selected:
+            if item["path"] not in body.base_hashes:
+                raise HTTPException(409, "Your review is out of date. Preview the proposal again before applying.")
+            if _sha256(item["old_bytes"]) != body.base_hashes[item["path"]]:
+                raise HTTPException(409, "This file changed after you reviewed it: " + item["path"] + ". Preview the proposal again.")
+    root = root_path()
+    normalized = [{"path": item["path"], "target": item["target"], "content": item["content"]} for item in selected]
+    backups = {item["path"]: item["old_bytes"] for item in selected}
     written = []
     try:
         for item in normalized:
@@ -513,6 +615,15 @@ def apply_agent_proposal(body: AgentApplyRequest, x_continuum_project_id: Annota
     note = "Applied " + str(len(written)) + " proposed file(s) to the local checkout: " + ", ".join(written) + ". Changes remain uncommitted; inspect Git diff and run checks."
     cloud_json("/rest/v1/agent_messages", x_continuum_user_token, method="POST", payload={"project_id":body.project_id,"session_id":body.session_id,"role":"tool","actor_type":"human","actor_id":user_id,"content":note,"metadata":{"action":"apply_proposal","paths":written}}, prefer="return=representation")
     return {"session_id":body.session_id,"applied":written,"committed":False,"pushed":False,"message":note}
+
+@APP.get("/api/worker/git/head", dependencies=[Depends(require_token)])
+def git_head() -> dict:
+    """Commit the checkout is on, so test evidence can say exactly which code it verified."""
+    root = root_path()
+    head = run_process(["git", "rev-parse", "HEAD"], root, 10)
+    status = run_process(["git", "status", "--porcelain"], root, 10)
+    sha = head["output"].strip() if head["exit_code"] == 0 and re.fullmatch(r"[0-9a-f]{40,64}", head["output"].strip()) else None
+    return {"sha": sha, "dirty": status["exit_code"] == 0 and bool(status["output"].strip())}
 
 @APP.get("/api/worker/git/status", dependencies=[Depends(require_token)])
 def git_status() -> dict:

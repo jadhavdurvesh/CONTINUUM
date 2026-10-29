@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && npm run typecheck:api && vite build",
     "preview": "vite preview",
     "typecheck:api": "tsc --noEmit -p tsconfig.api.json",
-    "test:api": "esbuild scripts/test-agent-cors.ts --bundle --platform=node --format=esm --outfile=/tmp/test-agent-cors.mjs && node /tmp/test-agent-cors.mjs && esbuild scripts/test-agent-proposal.ts --bundle --platform=node --format=esm --outfile=/tmp/test-agent-proposal.mjs && node /tmp/test-agent-proposal.mjs"
+    "test:api": "esbuild scripts/test-agent-cors.ts --bundle --platform=node --format=esm --outfile=/tmp/test-agent-cors.mjs && node /tmp/test-agent-cors.mjs && esbuild scripts/test-agent-proposal.ts --bundle --platform=node --format=esm --outfile=/tmp/test-agent-proposal.mjs && node /tmp/test-agent-proposal.mjs && esbuild scripts/test-markdown.tsx --bundle --platform=node --format=esm --jsx=automatic --outfile=node_modules/.cache/test-markdown.mjs --external:react --external:react-dom && node node_modules/.cache/test-markdown.mjs"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",
