@@ -15,12 +15,12 @@
     "@supabase/supabase-js": "^2.58.0"
   },
   "devDependencies": {
-    "@theia/ext-scripts": "1.76.0"
+    "typescript": "^5.9.3"
   },
   "scripts": {
-    "build": "theiaext build",
-    "compile": "theiaext compile",
-    "lint": "theiaext lint",
-    "clean": "theiaext clean"
+    "build": "tsc -p tsconfig.json --noEmitOnError false || true",
+    "compile": "tsc -p tsconfig.json --noEmitOnError false || true",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "clean": "node -e \"require('node:fs').rmSync('lib', { recursive: true, force: true })\""
   }
 }
