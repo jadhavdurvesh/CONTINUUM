@@ -26,6 +26,19 @@ def is_automation_path(relative: str | Path) -> bool:
     return bool(parts) and (any(part in _AUTOMATION_DIRS for part in parts) or parts[-1] in _AUTOMATION_FILES)
 
 
+def is_trusted_proposal(message: dict, user_id: str | None) -> bool:
+    """A proposal may be applied to this checkout only if the server generated it, or the current user posted it.
+
+    A teammate can insert an "assistant" message into a shared session, so authorship matters: their forged proposal
+    carries their id (and provenance "client"), never the server's.
+    """
+    if not isinstance(message, dict):
+        return False
+    if message.get("provenance") == "server":
+        return True
+    return bool(user_id) and str(message.get("actor_id") or "") == str(user_id)
+
+
 class WorkspaceError(ValueError):
     """A workspace path is invalid or not safe to edit."""
 

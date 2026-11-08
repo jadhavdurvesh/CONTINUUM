@@ -104,6 +104,8 @@ export default function KnowledgeBase({ projectId, userId, isOwner, onNotify }: 
     if (error) notify(error.message); else { notify("Decision " + status + "."); await load(); }
   }
 
+  useEffect(() => { if (!selectedId && docs.length) open(docs[0]); }, [docs]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const filtered = useMemo(() => docs.filter((doc) => !search || doc.title.toLowerCase().includes(search.toLowerCase())), [docs, search]);
 
   return <div className="knowledge">

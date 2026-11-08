@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import {
-  Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, Bell, BookOpen, Bot, Boxes, Code2,
-  Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, Command,
+  Activity, AlertTriangle, ArrowDownRight, ArrowUpRight, BookOpen, Bot, Boxes, Code2,
+  Check, CheckCheck, ChevronDown, ChevronRight, Command,
   FlaskConical, HardDrive, LayoutGrid, LockKeyhole, LogOut,
   Menu, Moon, Plus, Radio, Search, Settings2, ShieldCheck, ShieldEllipsis, Sun, Terminal,
   Target, Users, Workflow, X, Zap
@@ -30,21 +30,21 @@ const statusLabels: Record<TaskStatus, string> = {
 };
 const statusOrder: TaskStatus[] = ["backlog", "todo", "in_progress", "in_review", "done", "blocked"];
 const nav: { section: string; label: Page; icon: typeof LayoutGrid }[] = [
-  { section: "PROJECT", label: "Overview", icon: LayoutGrid },
-  { section: "PROJECT", label: "Tasks", icon: CheckCheck },
-  { section: "PROJECT", label: "Code Workbench", icon: Code2 },
-  { section: "PROJECT", label: "Local IDE", icon: Terminal },
-  { section: "PROJECT", label: "Workspace Bridge", icon: Zap },
-  { section: "PROJECT", label: "My Work", icon: UserCheck },
-  { section: "PROJECT", label: "Plan", icon: Workflow },
-  { section: "PROJECT", label: "Evidence", icon: FlaskConical },
-  { section: "PROJECT", label: "Quality", icon: Target },
-  { section: "PROJECT", label: "Releases", icon: Boxes },
-  { section: "PROJECT", label: "Documentation", icon: BookOpen },
-  { section: "SYSTEM", label: "Agents & workers", icon: Bot },
-  { section: "SYSTEM", label: "Activity", icon: Activity },
-  { section: "GOVERNANCE", label: "Protected resources", icon: LockKeyhole },
-  { section: "GOVERNANCE", label: "Settings", icon: Settings2 }
+  { section: "Workspace", label: "Overview", icon: LayoutGrid },
+  { section: "Workspace", label: "My Work", icon: UserCheck },
+  { section: "Workspace", label: "Activity", icon: Activity },
+  { section: "Plan", label: "Plan", icon: Workflow },
+  { section: "Plan", label: "Tasks", icon: CheckCheck },
+  { section: "Plan", label: "Releases", icon: Boxes },
+  { section: "Plan", label: "Documentation", icon: BookOpen },
+  { section: "Build", label: "Workspace Bridge", icon: Zap },
+  { section: "Build", label: "Code Workbench", icon: Code2 },
+  { section: "Build", label: "Local IDE", icon: Terminal },
+  { section: "Build", label: "Agents & workers", icon: Bot },
+  { section: "Assure", label: "Evidence", icon: FlaskConical },
+  { section: "Assure", label: "Quality", icon: Target },
+  { section: "Admin", label: "Protected resources", icon: LockKeyhole },
+  { section: "Admin", label: "Settings", icon: Settings2 }
 ];
 
 function App() {
@@ -69,6 +69,7 @@ function App() {
   const [grants, setGrants] = useState<any[]>([]);
   const [codeFiles, setCodeFiles] = useState<{id:string;path:string}[]>([]);
   const [members, setMembers] = useState<any[]>([]);
+  const memberNames = useMemo(() => new Map<string, string>(members.filter((member: any) => member.display_name).map((member: any) => [member.user_id, member.display_name] as [string, string])), [members]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -76,7 +77,6 @@ function App() {
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showProjectPicker, setShowProjectPicker] = useState(false);
-  const [showCommand, setShowCommand] = useState(false);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [toast, setToast] = useState("");
@@ -321,8 +321,8 @@ function App() {
     </div>;
   }
 
-  const pageTitle = page === "Overview" ? "Project overview" : page;
-  const groupedNav = ["PROJECT", "SYSTEM", "GOVERNANCE"];
+  const pageTitle = page;
+  const groupedNav = ["Workspace", "Plan", "Build", "Assure", "Admin"];
   const pageDescription: Record<Page, string> = {
     "Overview": "A live view of delivery, engineering health, and what needs attention.",
     "Tasks": "Track the work, the owner, and the next meaningful state change.",
@@ -337,7 +337,7 @@ function App() {
     "Quality": "Test cases, results and the defect register that can block work and releases.",
     "Releases": "Scope a release to requirements and ship only when the evidence says it is ready.",
     "Evidence": "Requirements, tests, reviews and completion — progress backed by proof, not clicks.",
-    "Documentation": "Decisions and technical knowledge will live alongside the work they explain.",
+    "Documentation": "Specifications, architecture notes and decisions — versioned and linked to the work they explain.",
     "Settings": "Workspace membership, project configuration, and cloud connection details."
   };
 
@@ -356,19 +356,18 @@ function App() {
         </div>)}
       </nav>
       <div className="sidebar-bottom">
-        <div className="cloud-mini"><div className="cloud-mini-top"><span className="online-pulse"/><span>SHARED CLOUD</span><span className="cloud-mini-state">LIVE</span></div><p>Changes sync across signed-in devices.</p></div>
-        <button className="nav-link" onClick={() => setPage("Settings")}><CircleHelp size={17}/><span>Help & workspace setup</span></button>
         <div className="profile-row"><div className="avatar">{(session.user.email?.[0] ?? "U").toUpperCase()}</div><div className="profile-copy"><strong>{session.user.user_metadata?.display_name ?? session.user.email?.split("@")[0]}</strong><span>{isOwner ? "Workspace owner" : "Project collaborator"}</span></div><button className="icon-quiet" onClick={() => void signOut()} title="Sign out" aria-label="Sign out"><LogOut size={16}/></button></div>
       </div>
     </aside>
 
     <main className="main-area">
       <header className="topbar">
-        <div className="topbar-left"><button className="icon-quiet menu-toggle" onClick={() => setMobileNav(true)} aria-label="Open navigation"><Menu size={19}/></button><div className="breadcrumbs"><span>Workspace</span><ChevronRight size={13}/><strong>{pageTitle}</strong></div></div>
-        <div className="topbar-right"><button className="button secondary small" onClick={() => setSearchOpen(true)} aria-label="Search the project"><Search size={13}/> Search <span className="kbd-hint">Ctrl K</span></button><div className="sync-status"><span className="online-pulse"/><span>{page === "Local IDE" ? "Local worker mode" : "Cloud connected"}</span></div><button className="top-icon" onClick={() => setShowCommand(true)} aria-label="Search workspace"><Search size={17}/><kbd>⌘ K</kbd></button><button className="top-icon theme-toggle" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"} title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}>{theme === "dark" ? <Sun size={16}/> : <Moon size={16}/>}<span>{theme === "dark" ? "Light" : "Dark"}</span></button><button className="top-icon notification" aria-label="Notifications"><Bell size={17}/><i/></button><div className="top-avatar">{(session.user.email?.[0] ?? "U").toUpperCase()}</div></div>
+        <div className="topbar-left"><button className="icon-quiet menu-toggle" onClick={() => setMobileNav(true)} aria-label="Open navigation"><Menu size={19}/></button><div className="breadcrumbs"><span>{project?.name ?? "Workspace"}</span><ChevronRight size={13}/><strong>{pageTitle}</strong></div></div>
+        <button className="top-search" onClick={() => setSearchOpen(true)} aria-label="Search the project"><Search size={15}/><span>Search tasks, documents, pages…</span><kbd>Ctrl K</kbd></button>
+        <div className="topbar-right"><div className="sync-status" title={page === "Local IDE" ? "Connected to the local worker" : "Realtime sync is on"}><span className="online-pulse"/><span>{page === "Local IDE" ? "Local worker" : "Live"}</span></div><button className="top-icon theme-toggle" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"} title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}>{theme === "dark" ? <Sun size={17}/> : <Moon size={17}/>}</button><div className="top-avatar" title={session.user.email ?? ""}>{(session.user.email?.[0] ?? "U").toUpperCase()}</div></div>
       </header>
       <div className="page-body">
-        <div className="page-intro"><div><div className="eyebrow"><span className="eyebrow-mark"/> PROJECT CONTROL / {project ? project.status.toUpperCase() : "SETUP"}</div><h1>{page === "Overview" ? <>The work, <em>in context.</em></> : pageTitle}</h1><p>{pageDescription[page]}</p></div><div className="intro-actions"><button className="button secondary" onClick={() => void loadProjectData()}><Radio size={15}/> Refresh</button><button className="button primary" onClick={() => project ? setShowTaskForm(true) : setShowProjectForm(true)}><Plus size={16}/>{project ? "New task" : "New project"}</button></div></div>
+        <div className="page-intro"><div><h1>{pageTitle}</h1><p>{page === "Overview" && project?.description ? project.description : pageDescription[page]}</p></div>{(page === "Overview" || !project) && <div className="intro-actions"><button className="button primary" onClick={() => project ? setShowTaskForm(true) : setShowProjectForm(true)}><Plus size={16}/>{project ? "New task" : "New project"}</button></div>}</div>
 
         {loadError && <div className="inline-error"><ShieldEllipsis size={16}/><span>{loadError}</span></div>}
         {page === "Settings" ? <section className="panel full-panel">
@@ -398,7 +397,6 @@ function App() {
         page === "Local IDE" ? <LocalIDE key={project.id} projectId={project.id} userId={currentUserId ?? ""} accessToken={session.access_token ?? ""} isOwner={isOwner} onNotify={notify}/> :
         page === "Code Workbench" ? <CodeWorkbench key={project.id} projectId={project.id} userId={currentUserId ?? ""} isOwner={isOwner} onNotify={notify}/> :
         page === "Overview" ? <>
-          <div className="overview-ribbon"><div className="ribbon-copy"><div className="ribbon-icon"><Zap size={17}/></div><div><strong>{project.name}</strong><span>{project.description || "Shared project space"} · Live workspace</span></div></div><div className="ribbon-meta"><span><Users size={15}/> Shared with your team</span><span><Clock3 size={15}/> Updated live</span></div></div>
           <div className="metric-grid">
             <MetricCard label="Completion" value={tasks.length ? `${completion}%` : "—"} note={tasks.length ? `${doneCount} of ${tasks.length} tasks complete` : "Awaiting first task"} icon={Target} accent="terracotta" progress={tasks.length ? completion : 0}/>
             <MetricCard label="In motion" value={String(activeCount)} note="Todo, active & review" icon={Workflow} accent="olive"/>
@@ -412,14 +410,14 @@ function App() {
             </section>
             <section className="panel activity-panel"><div className="panel-heading"><div><div className="section-kicker">AUDIT STREAM</div><h2>Recent activity</h2><p>Who changed what, and when.</p></div><button className="icon-quiet" onClick={() => setPage("Activity")} aria-label="View all activity"><ArrowUpRight size={16}/></button></div>
               {events.length === 0 ? <EmptyInline icon={Activity} title="Nothing in the audit stream yet" text="Task changes and other recorded actions will appear here."/> :
-                <div className="activity-list">{events.slice(0,6).map((event) => <ActivityRow key={event.id} event={event}/>)}</div>}
+                <div className="activity-list">{events.slice(0,6).map((event) => <ActivityRow key={event.id} event={event} names={memberNames}/>)}</div>}
             </section>
           </div>
           <div className="bottom-grid">
             <section className="panel focus-panel"><div className="panel-heading"><div><div className="section-kicker">QUALITY GATE</div><h2>Test evidence</h2><p>Results will be linked to commits and task acceptance criteria.</p></div><FlaskConical size={18} className="muted-icon"/></div><div className="quality-empty"><div className="quality-graphic"><div className="quality-ring"><Check size={21}/></div><div className="quality-orbit orbit-one"/><div className="quality-orbit orbit-two"/></div><div><strong>No test runs connected</strong><span>Quality metrics stay blank until a test runner records real evidence.</span></div></div></section>
             <section className="panel workforce-panel"><div className="panel-heading"><div><div className="section-kicker">DISTRIBUTED WORK</div><h2>Agents & workstations</h2><p>Cloud coordination, local execution.</p></div><Bot size={18} className="muted-icon"/></div><div className="worker-callout"><div className="worker-icon"><Bot size={20}/></div><div><strong>Control plane ready to configure</strong><span>Worker heartbeats and agent handoffs are the next integration milestone.</span></div><button className="icon-quiet" onClick={() => setPage("Agents & workers")} aria-label="Open agents"><ArrowUpRight size={16}/></button></div></section>
           </div>
-        </> : page === "Tasks" ? <section className="panel full-panel"><div className="panel-heading"><div><div className="section-kicker">PROJECT WORK</div><h2>Task register</h2><p>Task updates are stored in the shared cloud database.</p></div><button className="button primary" onClick={() => setShowTaskForm(true)}><Plus size={15}/> New task</button></div><div className="task-toolbar"><div className="search-field"><Search size={15}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Find a task…"/></div><select value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter tasks"><option value="all">All statuses</option>{statusOrder.map(s => <option value={s} key={s}>{statusLabels[s]}</option>)}</select></div>{filteredTasks.length ? <div className="task-list full-task-list">{filteredTasks.map(task => <TaskRow key={task.id} task={task} locked={isLocked(locks, task)} granted={hasGrant(grants, currentUserId, task)} canManage={isOwner} onStatus={updateTaskStatus} onLock={toggleLock} onRequest={requestPermission}/>)}</div> : <EmptyInline icon={Search} title="No matching tasks" text="Try another filter or create a task for this project." action="Create task" onAction={() => setShowTaskForm(true)}/>}</section> : page === "Activity" ? <section className="panel full-panel"><div className="panel-heading"><div><div className="section-kicker">TRACEABILITY</div><h2>Project activity</h2><p>Recorded events from the shared workspace.</p></div><Activity size={19} className="muted-icon"/></div>{events.length ? <div className="activity-list expanded-activity">{events.map(event => <ActivityRow key={event.id} event={event}/>)}</div> : <EmptyInline icon={Activity} title="The audit trail is empty" text="Create or update a task to record the first event."/>}</section> : page === "Protected resources" ? <section className="panel full-panel"><div className="panel-heading"><div><div className="section-kicker">CHANGE CONTROL</div><h2>Protected resources</h2><p>Locks are enforced in the database, not just hidden in the interface.</p></div><LockKeyhole size={19} className="muted-icon"/></div>{locks.length ? <div className="protected-list">{locks.map((lock) => { const task = tasks.find(t => t.id === lock.resource_id); return <div className="protected-row" key={lock.id}><div className="protected-icon"><LockKeyhole size={17}/></div><div className="protected-copy"><strong>{task?.title ?? "Protected resource"}</strong><span>{lock.reason} · {new Date(lock.created_at).toLocaleString()}</span></div>{isOwner && task && <button className="button secondary small" onClick={() => void toggleLock(task)}>Unlock</button>}</div>; })}</div> : <EmptyInline icon={ShieldCheck} title="Nothing is locked" text="Protect an important task from accidental edits. Only the project owner can create or remove locks."/>}{isOwner && <div className="permission-review"><div className="section-kicker">OWNER APPROVAL QUEUE</div><h3>Permission requests</h3><p>Approval grants resource-specific edit access for 24 hours.</p>{requests.length ? requests.map((request) => { const relatedTask=tasks.find((task) => task.id===request.resource_id); const relatedCode=codeFiles.find((file) => file.id===request.resource_id); const itemLabel=relatedTask?.title ?? relatedCode?.path ?? (request.resource_type + " resource"); return <div className="protected-row" key={request.id}><div className="protected-icon"><ShieldEllipsis size={17}/></div><div className="protected-copy"><strong>{itemLabel}</strong><span>{request.resource_type} · requested by {String(request.requested_by).slice(0,8)}… · {new Date(request.created_at).toLocaleString()}</span></div><button className="button secondary small" onClick={() => void reviewPermission(request,false)}>Deny</button><button className="button primary small" onClick={() => void reviewPermission(request,true)}>Grant 24h</button></div>; }) : <div className="permission-empty">No pending requests.</div>}</div>}<div className="governance-note"><ShieldCheck size={16}/><span>For a locked task, the database rejects edits unless the user has an active, resource-scoped permission grant. The owner can revoke protection.</span></div></section> : page === "Agents & workers" ? <AgentConsole key={project.id} projectId={project.id} userId={currentUserId ?? ""} accessToken={session.access_token ?? ""} onNotify={notify}/>  : page === "My Work" ? <MyWork key={project.id} projectId={project.id} onNotify={notify} onNavigate={(next) => setPage(next as Page)}/> : page === "Plan" ? <PlanBoard key={project.id} projectId={project.id} userId={currentUserId ?? ""} members={members} onNotify={notify} onChanged={() => void loadProjectData()}/> : page === "Quality" ? <QualityBoard key={project.id} projectId={project.id} userId={currentUserId ?? ""} isOwner={isOwner} onNotify={notify} members={members} onChanged={() => void loadProjectData()}/> : page === "Releases" ? <ReleaseBoard key={project.id} projectId={project.id} userId={currentUserId ?? ""} isOwner={isOwner} onNotify={notify} onChanged={() => void loadProjectData()}/> : page === "Evidence" ? <EvidenceBoard key={project.id} projectId={project.id} userId={currentUserId ?? ""} isOwner={isOwner} onNotify={notify} onChanged={() => void loadProjectData()}/> : page === "Documentation" ? <KnowledgeBase key={project.id} projectId={project.id} userId={currentUserId ?? ""} isOwner={isOwner} onNotify={notify}/> : <section className="panel full-panel"><div className="panel-heading"><div><div className="section-kicker">WORKSPACE ADMINISTRATION</div><h2>Workspace settings</h2><p>Account and cloud configuration.</p></div><Settings2 size={19} className="muted-icon"/></div><div className="settings-list"><div><span>Signed in as</span><strong>{session.user.email}</strong></div><div><span>Workspace role</span><strong>{isOwner ? "Owner" : "Collaborator"}</strong></div><div><span>Backend</span><strong>Hosted Supabase · PostgreSQL</strong></div><div><span>Realtime sync</span><strong>Subscribed for this project</strong></div><div><span>Project ID</span><code>{project.id}</code></div></div><button className="button secondary" onClick={() => void signOut()}><LogOut size={15}/> Sign out</button></section>}
+        </> : page === "Tasks" ? <section className="panel full-panel"><div className="panel-heading"><div><div className="section-kicker">PROJECT WORK</div><h2>Task register</h2><p>Task updates are stored in the shared cloud database.</p></div><button className="button primary" onClick={() => setShowTaskForm(true)}><Plus size={15}/> New task</button></div><div className="task-toolbar"><div className="search-field"><Search size={15}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Find a task…"/></div><select value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter tasks"><option value="all">All statuses</option>{statusOrder.map(s => <option value={s} key={s}>{statusLabels[s]}</option>)}</select></div>{filteredTasks.length ? <div className="task-list full-task-list">{filteredTasks.map(task => <TaskRow key={task.id} task={task} locked={isLocked(locks, task)} granted={hasGrant(grants, currentUserId, task)} canManage={isOwner} onStatus={updateTaskStatus} onLock={toggleLock} onRequest={requestPermission}/>)}</div> : <EmptyInline icon={Search} title="No matching tasks" text="Try another filter or create a task for this project." action="Create task" onAction={() => setShowTaskForm(true)}/>}</section> : page === "Activity" ? <section className="panel full-panel"><div className="panel-heading"><div><div className="section-kicker">TRACEABILITY</div><h2>Project activity</h2><p>Recorded events from the shared workspace.</p></div><Activity size={19} className="muted-icon"/></div>{events.length ? <div className="activity-list expanded-activity">{events.map(event => <ActivityRow key={event.id} event={event} names={memberNames}/>)}</div> : <EmptyInline icon={Activity} title="The audit trail is empty" text="Create or update a task to record the first event."/>}</section> : page === "Protected resources" ? <section className="panel full-panel"><div className="panel-heading"><div><div className="section-kicker">CHANGE CONTROL</div><h2>Protected resources</h2><p>Locks are enforced in the database, not just hidden in the interface.</p></div><LockKeyhole size={19} className="muted-icon"/></div>{locks.length ? <div className="protected-list">{locks.map((lock) => { const task = tasks.find(t => t.id === lock.resource_id); return <div className="protected-row" key={lock.id}><div className="protected-icon"><LockKeyhole size={17}/></div><div className="protected-copy"><strong>{task?.title ?? "Protected resource"}</strong><span>{lock.reason} · {new Date(lock.created_at).toLocaleString()}</span></div>{isOwner && task && <button className="button secondary small" onClick={() => void toggleLock(task)}>Unlock</button>}</div>; })}</div> : <EmptyInline icon={ShieldCheck} title="Nothing is locked" text="Protect an important task from accidental edits. Only the project owner can create or remove locks."/>}{isOwner && <div className="permission-review"><div className="section-kicker">OWNER APPROVAL QUEUE</div><h3>Permission requests</h3><p>Approval grants resource-specific edit access for 24 hours.</p>{requests.length ? requests.map((request) => { const relatedTask=tasks.find((task) => task.id===request.resource_id); const relatedCode=codeFiles.find((file) => file.id===request.resource_id); const itemLabel=relatedTask?.title ?? relatedCode?.path ?? (request.resource_type + " resource"); return <div className="protected-row" key={request.id}><div className="protected-icon"><ShieldEllipsis size={17}/></div><div className="protected-copy"><strong>{itemLabel}</strong><span>{request.resource_type} · requested by {String(request.requested_by).slice(0,8)}… · {new Date(request.created_at).toLocaleString()}</span></div><button className="button secondary small" onClick={() => void reviewPermission(request,false)}>Deny</button><button className="button primary small" onClick={() => void reviewPermission(request,true)}>Grant 24h</button></div>; }) : <div className="permission-empty">No pending requests.</div>}</div>}<div className="governance-note"><ShieldCheck size={16}/><span>For a locked task, the database rejects edits unless the user has an active, resource-scoped permission grant. The owner can revoke protection.</span></div></section> : page === "Agents & workers" ? <AgentConsole key={project.id} projectId={project.id} userId={currentUserId ?? ""} accessToken={session.access_token ?? ""} onNotify={notify}/>  : page === "My Work" ? <MyWork key={project.id} projectId={project.id} onNotify={notify} onNavigate={(next) => setPage(next as Page)}/> : page === "Plan" ? <PlanBoard key={project.id} projectId={project.id} userId={currentUserId ?? ""} members={members} onNotify={notify} onChanged={() => void loadProjectData()}/> : page === "Quality" ? <QualityBoard key={project.id} projectId={project.id} userId={currentUserId ?? ""} isOwner={isOwner} onNotify={notify} members={members} onChanged={() => void loadProjectData()}/> : page === "Releases" ? <ReleaseBoard key={project.id} projectId={project.id} userId={currentUserId ?? ""} isOwner={isOwner} onNotify={notify} onChanged={() => void loadProjectData()}/> : page === "Evidence" ? <EvidenceBoard key={project.id} projectId={project.id} userId={currentUserId ?? ""} isOwner={isOwner} onNotify={notify} onChanged={() => void loadProjectData()}/> : page === "Documentation" ? <KnowledgeBase key={project.id} projectId={project.id} userId={currentUserId ?? ""} isOwner={isOwner} onNotify={notify}/> : <section className="panel full-panel"><div className="panel-heading"><div><div className="section-kicker">WORKSPACE ADMINISTRATION</div><h2>Workspace settings</h2><p>Account and cloud configuration.</p></div><Settings2 size={19} className="muted-icon"/></div><div className="settings-list"><div><span>Signed in as</span><strong>{session.user.email}</strong></div><div><span>Workspace role</span><strong>{isOwner ? "Owner" : "Collaborator"}</strong></div><div><span>Backend</span><strong>Hosted Supabase · PostgreSQL</strong></div><div><span>Realtime sync</span><strong>Subscribed for this project</strong></div><div><span>Project ID</span><code>{project.id}</code></div></div><button className="button secondary" onClick={() => void signOut()}><LogOut size={15}/> Sign out</button></section>}
         {page === "Settings" && project && <section className="panel full-panel team-management">
   <div className="panel-heading"><div><div className="section-kicker">COLLABORATION</div><h2>People & access</h2><p>One cloud workspace shared between your authorized accounts.</p></div><Users size={19} className="muted-icon"/></div>
   {isOwner && <form className="invite-form" onSubmit={inviteMember}><label htmlFor="member-email">Invite your partner by email</label><div className="invite-input-row"><input id="member-email" type="email" autoComplete="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} required placeholder="partner@example.com"/><button className="button primary" type="submit" disabled={inviting}>{inviting ? "Sending…" : "Send invite"} <ArrowUpRight size={14}/></button></div><small>The server verifies owner access and sends the invitation through the configured email provider.</small></form>}
@@ -428,12 +426,12 @@ function App() {
 </section>}
         <footer className="page-footer"><span>CONTINUUM <i/> PRIVATE ENGINEERING WORKSPACE</span><span><span className="online-pulse"/> Shared cloud state · Changes are attributed</span></footer>
       </div>
-      {project && <GlobalSearch projectId={project.id} open={searchOpen} onClose={() => setSearchOpen(false)} onNavigate={(next) => setPage(next as Page)}/>}
+      {project && <GlobalSearch projectId={project.id} pages={nav.map((item) => item.label)} open={searchOpen} onClose={() => setSearchOpen(false)} onNavigate={(next) => setPage(next as Page)}/>}
     </main>
 
     {showTaskForm && <Modal title="Create a task" eyebrow="DELIVERY QUEUE" onClose={() => setShowTaskForm(false)}><form className="modal-form" onSubmit={createTask}><label>Task title<input name="title" required minLength={2} maxLength={180} autoFocus placeholder="e.g. Define telemetry message schema"/></label><label>Description<textarea name="description" rows={3} placeholder="What needs to be done? Include acceptance criteria if useful."/></label><div className="form-row"><label>Priority<select name="priority" defaultValue="normal"><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="critical">Critical</option></select></label><label>Status<select name="status" defaultValue="todo">{statusOrder.map(s => <option key={s} value={s}>{statusLabels[s]}</option>)}</select></label></div><label>Due date<input type="date" name="due_date"/></label><div className="modal-actions"><button className="button secondary" type="button" onClick={() => setShowTaskForm(false)}>Cancel</button><button className="button primary" type="submit"><Plus size={15}/> Save task</button></div></form></Modal>}
     {showProjectForm && <Modal title="Create a project" eyebrow="NEW PROJECT SPACE" onClose={() => setShowProjectForm(false)}><form className="modal-form" onSubmit={createProject}><label>Project name<input name="name" required minLength={2} maxLength={100} autoFocus placeholder="Your megaproject name"/></label><label>Purpose and scope<textarea name="description" rows={4} placeholder="What are you building? What is in scope?"/></label><div className="modal-footnote"><LockKeyhole size={15}/> The project will be created in the shared cloud database and owned by your signed-in account.</div><div className="modal-actions"><button className="button secondary" type="button" onClick={() => setShowProjectForm(false)}>Cancel</button><button className="button primary" type="submit"><Plus size={15}/> Create project</button></div></form></Modal>}
-    {showCommand && <Modal title="Jump to…" eyebrow="WORKSPACE COMMAND" onClose={() => setShowCommand(false)}><div className="command-list">{nav.map((item) => { const Icon=item.icon; return <button key={item.label} onClick={() => { setPage(item.label); setShowCommand(false); }}><Icon size={17}/><span>{item.label}</span><ChevronRight size={14}/></button>; })}</div></Modal>}
+    
     {toast && <div className="toast"><Check size={16}/>{toast}</div>}
     {loading && <div className="loading-indicator"><span className="online-pulse"/> Syncing cloud state</div>}
   </div>;
@@ -506,17 +504,33 @@ function TaskRow({task,locked,granted,canManage,onStatus,onLock,onRequest}:{task
   const mayEdit = !locked || granted;
   return <div className="task-row">
     <div className={"task-status-glyph status-" + task.status}>{task.status === "done" ? <Check size={13}/> : task.status === "blocked" ? <ShieldEllipsis size={13}/> : <span/>}</div>
-    <div className="task-main"><div className="task-title-line"><strong>{task.title}</strong>{locked && <LockKeyhole size={13} className="locked-icon"/>}</div><div className="task-subline"><span className={"priority-dot " + priorityClass}/><span>{task.priority}</span><span className="meta-separator">·</span><span>{new Date(task.created_at).toLocaleDateString(undefined,{month:"short",day:"numeric"})}</span></div></div>
+    <div className="task-main"><div className="task-title-line"><strong>{task.title}</strong>{locked && <LockKeyhole size={13} className="locked-icon"/>}</div><div className="task-subline"><span className={"priority-dot " + priorityClass}/><span>{task.priority}</span><span className="meta-separator">·</span>{task.due_date ? <span className={task.status !== "done" && new Date(task.due_date + "T00:00:00") < new Date(new Date().toDateString()) ? "due-overdue" : ""}>Due {new Date(task.due_date + "T00:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric"})}</span> : <span>No due date</span>}</div></div>
     <div className="task-row-actions">
       {!mayEdit && !canManage ? <button className="small-action" onClick={() => onRequest(task)}>Request edit</button> : !mayEdit && canManage ? <span className="locked-pill">Locked</span> : <select className={"status-select status-select-" + task.status} aria-label={"Status for " + task.title} value={task.status} onChange={(e) => onStatus(task,e.target.value as TaskStatus)}>{statusOrder.map(s => <option key={s} value={s}>{statusLabels[s]}</option>)}</select>}
       {canManage && <button className={"row-more " + (locked ? "lock-active" : "")} onClick={() => onLock(task)} aria-label={locked ? "Unlock task" : "Protect task"} title={locked ? "Unlock task" : "Protect task"}><LockKeyhole size={14}/></button>}
     </div>
   </div>;
 }
-function ActivityRow({event}:{event:ActivityEvent}) {
-  const title = String(event.details?.title ?? event.entity_type);
-  const actionLabel = event.action.replaceAll(".", " ");
-  return <div className="activity-row"><div className={`activity-avatar actor-${event.actor_type}`}>{event.actor_type === "agent" ? <Bot size={14}/> : event.actor_type === "system" ? <Zap size={14}/> : <Users size={14}/>}</div><div className="activity-copy"><div><strong>{title}</strong><span>{actionLabel}</span></div><small>{event.actor_type === "human" ? "Workspace member" : event.actor_type === "agent" ? "AI agent" : "System"} · {relativeTime(event.created_at)}</small></div><ChevronRight size={14} className="activity-chevron"/></div>;
+const ENTITY_LABEL: Record<string, string> = {
+  tasks: "task", task: "task", requirements: "requirement", documents: "document", decisions: "decision", issues: "defect", milestones: "milestone",
+  releases: "release", release_requirements: "release scope", project_links: "link", test_runs: "test result", test_cases: "test case",
+  task_reviews: "review", agent_session: "agent session", agent_sessions: "agent session", agent_messages: "agent message", code_files: "file",
+  resource_locks: "lock", permission_requests: "permission request", permission_grants: "permission grant", workstreams: "workstream",
+  repositories: "repository", task_dependencies: "dependency", project_members: "member", projects: "project"
+};
+const ACTION_VERB: Record<string, string> = { insert: "created", created: "created", update: "updated", updated: "updated", delete: "removed", deleted: "removed" };
+function describeActivity(event: ActivityEvent, names: Map<string, string>) {
+  const [entityPart, verbPart = "updated"] = event.action.split(".");
+  const entity = ENTITY_LABEL[entityPart] ?? ENTITY_LABEL[event.entity_type] ?? event.entity_type.replaceAll("_", " ");
+  const verb = ACTION_VERB[verbPart] ?? verbPart.replaceAll("_", " ");
+  const rawTitle = typeof event.details?.title === "string" ? event.details.title : typeof event.details?.name === "string" ? event.details.name : "";
+  const title = rawTitle && rawTitle !== event.entity_type && rawTitle !== entityPart ? rawTitle : "";
+  const actor = event.actor_type === "agent" ? "An AI agent" : event.actor_type === "system" ? "CONTINUUM" : (event.actor_id && names.get(event.actor_id)) || "A teammate";
+  return { actor, verb, entity, title };
+}
+function ActivityRow({event, names}:{event:ActivityEvent; names: Map<string,string>}) {
+  const { actor, verb, entity, title } = describeActivity(event, names);
+  return <div className="activity-row"><div className={`activity-avatar actor-${event.actor_type}`}>{event.actor_type === "agent" ? <Bot size={14}/> : event.actor_type === "system" ? <Zap size={14}/> : <span>{actor.slice(0,1).toUpperCase()}</span>}</div><div className="activity-copy"><div><strong>{actor}</strong> {verb} {entity}{title && <> <em>{title}</em></>}</div><small>{relativeTime(event.created_at)}</small></div></div>;
 }
 function Modal({title,eyebrow,onClose,children}:{title:string;eyebrow:string;onClose:()=>void;children:ReactNode}) {
   useEffect(() => { const handler=(e:KeyboardEvent)=>{if(e.key==="Escape")onClose();}; window.addEventListener("keydown",handler); return ()=>window.removeEventListener("keydown",handler); },[onClose]);

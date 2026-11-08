@@ -125,7 +125,7 @@ export default function WorkspaceBridge({ projectId, userId, accessToken, onNoti
     try { head = await workerCall<{ sha: string | null; dirty: boolean }>("/api/worker/git/head", ctx); } catch { /* evidence is still useful without a SHA */ }
     const passed = run.result.exit_code === 0;
     const { error } = await supabase.from("test_runs").insert({
-      project_id: projectId, task_id: task.id, test_case_id: caseId || null, result: passed ? "passed" : "failed", environment: "local-worker",
+      project_id: projectId, task_id: task.id, test_case_id: caseId || null, result: passed ? "passed" : "failed", environment: "local-worker", source: "local-worker",
       commit_sha: head.sha, duration_ms: run.durationMs, started_at: run.startedAt, finished_at: new Date().toISOString(),
       summary: run.command.join(" ") + " → exit " + run.result.exit_code + (head.dirty ? " (uncommitted changes in the checkout)" : ""),
       log_text: run.result.output.slice(-8000), executed_by: userId, actor_type: "human"

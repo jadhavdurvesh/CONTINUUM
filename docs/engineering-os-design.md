@@ -64,7 +64,7 @@ Evidence integrity rules, each covered by a SQL test:
 | Capability | Owner | Collaborator | AI agent | System automation |
 |---|---|---|---|---|
 | Create tasks/requirements | ✅ | ✅ | proposes | — |
-| Record test result | ✅ | ✅ (as self) | ⬜ via worker lease | ⬜ signed worker evidence |
+| Record test result | ✅ | ✅ (as self; ignored under `ci_only`) | ⬜ via worker lease | ✅ GitHub CI (signed webhook) |
 | Approve work | ✅ | ✅ (not own work) | ❌ never | ❌ |
 | Complete a task | with evidence or waiver | with evidence | ❌ | ❌ |
 | Waive evidence / disable it | ✅ | ❌ | ❌ | ❌ |
@@ -104,7 +104,7 @@ The dashboard now covers the "engineering workspace" table from the vision, all 
 | Documentation & knowledge | **Documentation** | Markdown documents (safe renderer), full version history, restore, optimistic-concurrency saves, ADR-style decisions | stale saves rejected (HTTP 409); only owners accept decisions; accepted decisions are immutable (supersede instead) |
 | Project graph | all pages | Typed links between tasks, requirements, documents, decisions, defects, tests, milestones and releases, visible from both ends | links must stay inside the project; deleting an item removes its links |
 
-Verification: 91 SQL assertions on real PostgreSQL (3 suites), a 78-check end-to-end run of the dashboard's real queries through PostgREST with signed JWTs and RLS (`supabase/tests/api-smoke/run.sh`), 28 worker tests (incl. the bridge's preview/apply/staleness rules), markdown-renderer injection tests, and strict TypeScript builds. All run in CI.
+Verification: 130 SQL assertions on real PostgreSQL (4 suites), a 115-check end-to-end run of the dashboard's real queries through PostgREST with signed JWTs and RLS (`supabase/tests/api-smoke/run.sh`), 30 worker tests (bridge preview/apply/staleness and forged-proposal rules), GitHub webhook tests (signatures, references, payloads), markdown-renderer injection tests, and strict TypeScript builds. All run in CI.
 
 ### M2 — Workspace bridge ✅ (worker + dashboard path; Theia panel next)
 *Goal:* an agent step uses the **real local checkout**, and nothing is sent or written without you seeing it first. Built as the **Workspace Bridge** page plus new worker endpoints, so it is testable today and the Theia panel can reuse the same endpoints.
@@ -130,13 +130,22 @@ Still ⬜: the same flow as a Theia side panel, and worker-signed evidence (M3).
 ### M2b — Theia side panel (next, small)
 Reuse the endpoints above from the Theia cloud panel: "Select context" from open editors, the same diff review and per-file apply, then "Run tests" → evidence. Acceptance: one task goes requirement → proposal → apply → local test → evidence → human approval → done inside Theia, with no manual DB edits.
 
-### M3 — Trusted execution (next)
-*Problem:* manual evidence is honest-user evidence. A leased worker makes it verifiable.
-- `worker_leases(task_id, worker_id, expires_at)`; a worker records runs through a `SECURITY DEFINER` RPC that stamps `actor_type='system'`, the worker identity, command, exit code, commit SHA, log hash.
-- Gate option `evidence_source = 'worker'` per project: manual runs no longer count.
-- Isolated task workspace (git worktree), command allow-list per task, timeouts, output caps, secrets scrubbed (already done for the legacy worker).
+### M3 — Trusted evidence ✅
+Manual test results rely on the recorder's honesty, so results can now come from somewhere people cannot type.
 
-### M4 — Orchestration
+| Piece | Behaviour |
+|---|---|
+| GitHub webhook `api/integrations/github` | verifies GitHub's HMAC-SHA256 signature over the raw body (constant-time); unknown repositories and bad signatures are indistinguishable (401); only completed `workflow_run` / `workflow_job` events are recorded; 1 MB cap |
+| Server-only RPCs | `ci_lookup` and `record_ci_run` are executable by `service_role` only; members cannot call them or insert `source = github-actions` / `actor_type = system` rows |
+| Task linking | `ct-<8 hex>` in a branch name, PR title or commit message; unknown or ambiguous references are counted and refused, never guessed; runs with no reference are kept as visible, non-gating history |
+| Test mapping | a test case's `ci_check` equal to the job name receives the result; otherwise the task gets a task-level run; redeliveries are deduplicated |
+| Evidence policy | per project: `any` (default) or `ci_only`; under `ci_only` the completion gate, requirement verification, health and review queue count only `system` runs; only owners change it |
+| Secrets | per-project webhook secret, write-only for owners, unreadable by any client (no RLS policy, privileges revoked) |
+| Agent proposals | the server stores proposals with `provenance = server` (clients cannot); apply flows (worker, native app) trust server proposals or the user's own, and refuse a teammate's forged message |
+
+Still ⬜: worker-leased isolated execution (so agent-run tests are also system evidence), and Theia panel.
+
+### M4 — Orchestration (next)
 Scheduler with bounded concurrency and per-project/user quotas; role handoffs (Planner→Coder→Reviewer→QA) driven by task state; resumable checkpoints; QA agent may only *cite recorded evidence* (its prompt receives `task_completion_status`, and it cannot mark anything passed).
 
 ### M5 — Knowledge & release
@@ -146,7 +155,7 @@ Documents/decisions linked to tasks and requirements; release readiness = all li
 Server-side agent messages (closes the "forgeable assistant message" gap), signed proposals, rate limits, signed installers, e2e tests across dashboard ↔ API ↔ Theia.
 
 ## 7. Known gaps (honest list)
-1. A project member can still insert a forged `assistant` agent message that "Apply" will trust → fixed in M6, mitigated now by showing every path and blocking automation directories.
-2. Manual test evidence relies on the recorder's honesty until M3.
+1. Forged agent messages: **closed for server-generated proposals** (needs `SUPABASE_SERVICE_ROLE_KEY`); without the key every proposal is a client message that only its author can apply.
+2. Manual test evidence relies on the recorder's honesty unless the project uses `ci_only`. A workflow that does not really test anything still produces green CI: the workflow files are part of the trust boundary (protect `.github/` with branch rules).
 3. Theia installer not yet validated; PySide6 app remains the fallback.
 4. No per-user rate limiting on agent runs yet.

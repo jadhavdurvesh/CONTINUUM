@@ -35,7 +35,7 @@ function Roadmap({ milestones }: { milestones: Plan["milestones"] }) {
     {dated.map((milestone, index) => {
       const late = milestone.status !== "completed" && milestone.status !== "cancelled" && milestone.time < today.getTime();
       const risky = late || milestone.status === "at_risk" || milestone.overdue > 0;
-      return <div key={milestone.id} className={"roadmap-marker " + (milestone.status === "completed" ? "ok" : risky ? "risk" : "")} style={{ left: at(milestone.time) + "%", top: (index % 3) * 38 + "px" }}>
+      return <div key={milestone.id} className={"roadmap-marker " + (milestone.status === "completed" ? "ok" : risky ? "risk" : "")} style={{ left: at(milestone.time) + "%", top: (index % 3) * 58 + "px" }}>
         <span className="roadmap-dot"/><div className="roadmap-card"><strong>{milestone.title}</strong><small>{milestone.due_date} · {milestone.percent}%</small></div></div>;
     })}
   </div></div>;
@@ -78,15 +78,16 @@ export default function PlanBoard({ projectId, userId, members, onNotify, onChan
   const patch = (task: PlanTask, change: Record<string, unknown>, message: string) => run(supabase!.from("tasks").update({ ...change, updated_by: userId }).eq("id", task.id), message);
 
   return <div className="evidence-board">
+    {plan && <div className="metric-grid evidence-metrics">
+      <div className="metric-card"><div className="metric-head"><span>Open tasks</span><Layers size={15}/></div><div className="metric-value">{plan.summary.open_tasks}</div></div>
+      <div className="metric-card"><div className="metric-head"><span>Blocked by dependencies</span><GitBranch size={15}/></div><div className="metric-value">{plan.summary.blocked_by_dependency}</div><div className="metric-note">Waiting on unfinished work</div></div>
+      <div className="metric-card"><div className="metric-head"><span>Overdue</span><TriangleAlert size={15}/></div><div className="metric-value">{plan.summary.overdue}</div><div className="metric-note">Past due date, not done</div></div>
+      <div className="metric-card"><div className="metric-head"><span>Unassigned</span><UserX size={15}/></div><div className="metric-value">{plan.summary.unassigned}</div><div className="metric-note">Open tasks with no owner</div></div>
+    </div>}
+
     <section className="panel full-panel">
       <div className="panel-heading"><div><div className="section-kicker">DELIVERY PLAN</div><h2>Milestones & workstreams</h2><p>Progress is computed from the tasks assigned to each milestone, never typed in by hand.</p></div>
-        <button className="button secondary small" onClick={() => void load()} disabled={loading}><RefreshCw size={13}/> Refresh</button></div>
-      {plan && <div className="metric-grid evidence-metrics">
-        <div className="metric-card"><div className="metric-head"><span>Open tasks</span><Layers size={15}/></div><div className="metric-value">{plan.summary.open_tasks}</div></div>
-        <div className="metric-card"><div className="metric-head"><span>Blocked by dependencies</span><GitBranch size={15}/></div><div className="metric-value">{plan.summary.blocked_by_dependency}</div><div className="metric-note">Waiting on unfinished work</div></div>
-        <div className="metric-card"><div className="metric-head"><span>Overdue</span><TriangleAlert size={15}/></div><div className="metric-value">{plan.summary.overdue}</div><div className="metric-note">Past due date, not done</div></div>
-        <div className="metric-card"><div className="metric-head"><span>Unassigned</span><UserX size={15}/></div><div className="metric-value">{plan.summary.unassigned}</div><div className="metric-note">Open tasks with no owner</div></div>
-      </div>}
+        <button className="icon-quiet" title="Refresh" aria-label="Refresh" onClick={() => void load()} disabled={loading}><RefreshCw size={16}/></button></div>
       <form className="evidence-inline-form" onSubmit={(event) => { event.preventDefault(); const form = event.currentTarget; const data = new FormData(form); const title = String(data.get("title") ?? "").trim();
         if (title.length < 2) { notify("Give the milestone a title."); return; }
         void run(supabase!.from("milestones").insert({ project_id: projectId, title, due_date: String(data.get("due") ?? "") || null, created_by: userId, position: (plan?.milestones.length ?? 0) }), "Milestone added.").then(() => form.reset()); }}>
@@ -99,7 +100,7 @@ export default function PlanBoard({ projectId, userId, members, onNotify, onChan
           <div className="pm-card-head"><Flag size={14}/><strong>{milestone.title}</strong>{atRisk && <span className="evidence-pill warn">At risk</span>}</div>
           <div className="metric-progress"><span style={{ width: milestone.percent + "%" }}/></div>
           <div className="pm-card-meta"><span>{milestone.done}/{milestone.total} done · {milestone.percent}%</span>
-            <span><CalendarClock size={11}/> {milestone.due_date ? (days !== null && days < 0 ? Math.abs(days) + " days late" : days === 0 ? "due today" : days + " days left") : "no date"}</span></div>
+            <span><CalendarClock size={11}/> {milestone.status === "completed" ? "completed" : milestone.due_date ? (days !== null && days < 0 ? Math.abs(days) + " days late" : days === 0 ? "due today" : days + " days left") : "no date"}</span></div>
           {(milestone.blocked > 0 || milestone.overdue > 0) && <div className="pm-card-meta"><span>{milestone.blocked} blocked · {milestone.overdue} overdue</span></div>}
           <select value={milestone.status} aria-label={"Status of " + milestone.title} onChange={(event) => void run(supabase!.from("milestones").update({ status: event.target.value }).eq("id", milestone.id), "Milestone updated.")}>
             {MILESTONE_STATUS.map((status) => <option key={status} value={status}>{status.replace("_", " ")}</option>)}</select>
@@ -124,7 +125,7 @@ export default function PlanBoard({ projectId, userId, members, onNotify, onChan
         const blockers = openDepsOf(task.id); const expanded = open === task.id;
         return <div className="evidence-task" key={task.id}>
           <div className="evidence-task-head">
-            <div className="protected-copy"><strong>{task.title}</strong><span>{task.status.replace("_", " ")} · {memberName(task.assigned_to)}{task.due_date ? " · due " + task.due_date : ""}{task.parent_task_id ? " · subtask of " + (byId.get(task.parent_task_id)?.title ?? "…") : ""}</span></div>
+            <div className="protected-copy"><strong>{task.title}</strong><span><code className="short-id" title="Use in a branch name or PR title so CI results attach to this task">ct-{task.id.slice(0, 8)}</code> · {task.status.replace("_", " ")} · {memberName(task.assigned_to)}{task.due_date ? " · due " + task.due_date : ""}{task.parent_task_id ? " · subtask of " + (byId.get(task.parent_task_id)?.title ?? "…") : ""}</span></div>
             {blockers.length > 0 && <span className="evidence-pill warn">Waiting on {blockers.length}</span>}
             <button className="button secondary small" onClick={() => setOpen(expanded ? "" : task.id)}>{expanded ? "Close" : "Plan"}</button>
           </div>

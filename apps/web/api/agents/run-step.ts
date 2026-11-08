@@ -131,11 +131,16 @@ export default async function handler(req: any, res: any) {
       const payload = parseProposal(generated.text);
       const userId = String(user.id);
       const messageContent = JSON.stringify(payload);
-      await fetchJson(root + "/rest/v1/agent_messages", token, publishableKey, "POST", {
+      const message = {
         project_id: projectId, session_id: sessionId, role: "assistant", actor_type: "agent",
         actor_id: userId, content: messageContent,
         metadata: { provider: generated.provider, model: generated.model, attempts: generated.attempts },
-      }, "return=minimal");
+      };
+      // With a server key the proposal is stored as provenance "server": clients cannot create such rows, so apply flows can
+      // trust it. Without the key it is stored as the caller's own ("client") message, which only that caller can apply.
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+      if (serviceKey) await fetchJson(root + "/rest/v1/agent_messages", serviceKey, serviceKey, "POST", { ...message, provenance: "server" }, "return=minimal");
+      else await fetchJson(root + "/rest/v1/agent_messages", token, publishableKey, "POST", message, "return=minimal");
       const checkpoint = {
         ...(session.checkpoint && typeof session.checkpoint === "object" ? session.checkpoint : {}),
         last_provider: generated.provider, last_model: generated.model,

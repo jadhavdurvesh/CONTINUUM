@@ -47,6 +47,8 @@ export default function ReleaseBoard({ projectId, userId, isOwner, onNotify, onC
     void loadReadiness(selectedId);
   }, [selectedId, releases, loadReadiness]);
 
+  useEffect(() => { if (!selectedId && releases.length) choose(releases[0]); }, [releases]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function choose(release: Release) { setSelectedId(release.id); setNotes(release.release_notes ?? ""); setSha(release.commit_sha ?? ""); }
 
   async function run(action: PromiseLike<{ error: { message: string } | null }>, success: string) {

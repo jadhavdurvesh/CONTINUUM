@@ -163,7 +163,7 @@ class CloudClient:
 
     def messages(self, project_id: str, session_id: str) -> list[dict[str, Any]]:
         result = self._rest("agent_messages", {
-            "select": "id,project_id,session_id,role,actor_type,actor_id,content,metadata,created_at",
+            "select": "id,project_id,session_id,role,actor_type,actor_id,provenance,content,metadata,created_at",
             "project_id": "eq." + project_id, "session_id": "eq." + session_id,
             "order": "created_at.asc", "limit": "120"
         })

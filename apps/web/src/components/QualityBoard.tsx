@@ -4,7 +4,7 @@ import { supabase } from "../lib/supabase";
 import { useStable } from "../lib/hooks";
 import LinksPanel from "./LinksPanel";
 
-type TestCase = { id: string; name: string; test_kind: string; is_required: boolean; requirement_id: string | null; task_id: string | null };
+type TestCase = { id: string; name: string; test_kind: string; is_required: boolean; requirement_id: string | null; task_id: string | null; ci_check: string | null };
 type Run = { test_case_id: string | null; result: string; created_at: string };
 type Issue = { id: string; title: string; description: string | null; issue_type: string; severity: string; status: string; task_id: string | null; assigned_to: string | null; created_at: string };
 type Ref = { id: string; title: string };
@@ -25,11 +25,12 @@ export default function QualityBoard({ projectId, userId, isOwner, members, onNo
   const [tasks, setTasks] = useState<Ref[]>([]);
   const [showClosed, setShowClosed] = useState(false);
   const [openIssue, setOpenIssue] = useState("");
+  const [tab, setTab] = useState<"tests" | "defects">("tests");
 
   const load = useCallback(async () => {
     if (!supabase) return;
     const [caseResult, runResult, issueResult, reqResult, taskResult] = await Promise.all([
-      supabase.from("test_cases").select("id,name,test_kind,is_required,requirement_id,task_id").eq("project_id", projectId).order("created_at", { ascending: false }).limit(300),
+      supabase.from("test_cases").select("id,name,test_kind,is_required,requirement_id,task_id,ci_check").eq("project_id", projectId).order("created_at", { ascending: false }).limit(300),
       supabase.from("test_runs").select("test_case_id,result,created_at").eq("project_id", projectId).not("test_case_id", "is", null).order("created_at", { ascending: false }).limit(1500),
       supabase.from("issues").select("*").eq("project_id", projectId).order("created_at", { ascending: false }).limit(300),
       supabase.from("requirements").select("id,title").eq("project_id", projectId).limit(300),
@@ -58,36 +59,39 @@ export default function QualityBoard({ projectId, userId, isOwner, members, onNo
   const taskTitle = (id: string | null) => tasks.find((task) => task.id === id)?.title;
 
   return <div className="evidence-board">
-    <section className="panel full-panel">
-      <div className="panel-heading"><div><div className="section-kicker">QUALITY</div><h2>Tests & defects</h2><p>What is verified, what is failing, and what could block a release.</p></div>
-        <button className="button secondary small" onClick={() => void load()}><RefreshCw size={13}/> Refresh</button></div>
-      <div className="metric-grid evidence-metrics">
-        <div className="metric-card"><div className="metric-head"><span>Required tests passing</span><FlaskConical size={15}/></div><div className="metric-value">{passing}<small>/{required.length}</small></div><div className="metric-progress"><span style={{ width: (required.length ? Math.round(100 * passing / required.length) : 0) + "%" }}/></div></div>
-        <div className="metric-card"><div className="metric-head"><span>Open defects & risks</span><Bug size={15}/></div><div className="metric-value">{openIssues.length}</div></div>
-        <div className="metric-card"><div className="metric-head"><span>Release-blocking</span><ShieldAlert size={15}/></div><div className="metric-value">{serious.length}</div><div className="metric-note">Open high/critical bugs</div></div>
-        <div className="metric-card"><div className="metric-head"><span>Requirements without tests</span><FlaskConical size={15}/></div><div className="metric-value">{untested.length}</div><div className="metric-note">Cannot be verified yet</div></div>
-      </div>
-      {untested.length > 0 && <div className="governance-note"><ShieldAlert size={16}/><span>No required test covers: {untested.slice(0, 5).map((requirement) => requirement.title).join(" · ")}{untested.length > 5 ? " …" : ""}</span></div>}
-    </section>
+    <div className="metric-grid evidence-metrics">
+      <div className="metric-card"><div className="metric-head"><span>Required tests passing</span><FlaskConical size={15}/></div><div className="metric-value">{passing}<small>/{required.length}</small></div><div className="metric-progress"><span style={{ width: (required.length ? Math.round(100 * passing / required.length) : 0) + "%" }}/></div></div>
+      <div className="metric-card"><div className="metric-head"><span>Open defects & risks</span><Bug size={15}/></div><div className="metric-value">{openIssues.length}</div></div>
+      <div className="metric-card"><div className="metric-head"><span>Release-blocking</span><ShieldAlert size={15}/></div><div className="metric-value">{serious.length}</div><div className="metric-note">Open high/critical bugs</div></div>
+      <div className="metric-card"><div className="metric-head"><span>Requirements without tests</span><FlaskConical size={15}/></div><div className="metric-value">{untested.length}</div><div className="metric-note">Cannot be verified yet</div></div>
+    </div>
+    {untested.length > 0 && <div className="governance-note"><ShieldAlert size={16}/><span>No required test covers: {untested.slice(0, 5).map((requirement) => requirement.title).join(" · ")}{untested.length > 5 ? " …" : ""}</span></div>}
+    <div className="tabs-row"><div className="pm-tabs" role="tablist" aria-label="Quality views">
+      <button role="tab" aria-selected={tab === "tests"} className={tab === "tests" ? "active" : ""} onClick={() => setTab("tests")}>Tests <span>{cases.length}</span></button>
+      <button role="tab" aria-selected={tab === "defects"} className={tab === "defects" ? "active" : ""} onClick={() => setTab("defects")}>Defects & risks <span>{openIssues.length}</span></button>
+    </div><button className="icon-quiet" title="Refresh" aria-label="Refresh" onClick={() => void load()}><RefreshCw size={16}/></button></div>
 
+    {tab === "tests" && 
     <section className="panel full-panel evidence-section">
       <div className="panel-heading"><div><div className="section-kicker">TEST CASES</div><h2>Verification</h2><p>Each result is recorded as you, immutably, and feeds the completion gate.</p></div></div>
       <form className="evidence-inline-form" onSubmit={(event) => { event.preventDefault(); const form = event.currentTarget; const data = new FormData(form); const name = String(data.get("name") ?? "").trim();
         if (name.length < 2) { notify("Name the test case."); return; }
-        void run(supabase!.from("test_cases").insert({ project_id: projectId, name, test_kind: String(data.get("kind")), requirement_id: String(data.get("requirement") ?? "") || null, task_id: String(data.get("task") ?? "") || null, is_required: data.get("required") === "on", created_by: userId }), "Test case added.").then(() => form.reset()); }}>
+        void run(supabase!.from("test_cases").insert({ project_id: projectId, name, test_kind: String(data.get("kind")), requirement_id: String(data.get("requirement") ?? "") || null, task_id: String(data.get("task") ?? "") || null, is_required: data.get("required") === "on", ci_check: String(data.get("ci") ?? "").trim() || null, created_by: userId }), "Test case added.").then(() => form.reset()); }}>
         <input name="name" placeholder="Test case, e.g. Hover stays within 1 m in 20 km/h wind" maxLength={180}/>
         <select name="kind" defaultValue="automated">{KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select>
         <select name="requirement" defaultValue=""><option value="">Requirement…</option>{requirements.map((requirement) => <option key={requirement.id} value={requirement.id}>{requirement.title}</option>)}</select>
         <select name="task" defaultValue=""><option value="">Task…</option>{tasks.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select>
+        <input name="ci" placeholder="CI check name (optional)" maxLength={100} style={{ maxWidth: 190 }}/>
         <label className="pm-check"><input type="checkbox" name="required" defaultChecked/> Required</label><button className="button primary small">Add test</button></form>
       {cases.length ? cases.map((testCase) => { const result = latest.get(testCase.id) ?? "not_run";
         return <div className="evidence-task" key={testCase.id}><div className="evidence-task-head">
-          <div className="protected-copy"><strong>{testCase.name}</strong><span>{testCase.test_kind}{testCase.is_required ? " · required" : " · optional"}{taskTitle(testCase.task_id) ? " · " + taskTitle(testCase.task_id) : ""} · {runCount.get(testCase.id) ?? 0} run(s)</span></div>
+          <div className="protected-copy"><strong>{testCase.name}</strong><span>{testCase.test_kind}{testCase.is_required ? " · required" : " · optional"}{testCase.ci_check ? " · CI: " + testCase.ci_check : ""}{taskTitle(testCase.task_id) ? " · " + taskTitle(testCase.task_id) : ""} · {runCount.get(testCase.id) ?? 0} run(s)</span></div>
           <span className={"evidence-pill " + (result === "passed" ? "ok" : result === "not_run" ? "" : "warn")}>{result.replace("_", " ")}</span>
           {(["passed", "failed"] as const).map((outcome) => <button key={outcome} className="button secondary small" onClick={() => void run(supabase!.from("test_runs").insert({ project_id: projectId, test_case_id: testCase.id, task_id: testCase.task_id, result: outcome, environment: "manual", executed_by: userId, actor_type: "human" }), "Recorded " + outcome + ".")}>Record {outcome}</button>)}
         </div></div>; }) : <p className="evidence-empty">No test cases yet. Define what “working” means before building it.</p>}
-    </section>
+    </section>}
 
+    {tab === "defects" && 
     <section className="panel full-panel evidence-section">
       <div className="panel-heading"><div><div className="section-kicker">DEFECTS & RISKS</div><h2>Issue register</h2><p>Open high-severity bugs block task completion and releases. Only owners can accept a risk.</p></div>
         <label className="pm-check"><input type="checkbox" checked={showClosed} onChange={(event) => setShowClosed(event.target.checked)}/> Show resolved</label></div>
@@ -110,6 +114,6 @@ export default function QualityBoard({ projectId, userId, isOwner, members, onNo
         {openIssue === issue.id && <div className="evidence-detail">{issue.description && <p>{issue.description}</p>}<LinksPanel projectId={projectId} userId={userId} isOwner={isOwner} entityType="issue" entityId={issue.id} onNotify={onNotify}/></div>}
       </div>)}
       {!issues.length && <p className="evidence-empty">No issues logged. Record defects and risks here so they can block what they should.</p>}
-    </section>
+    </section>}
   </div>;
 }

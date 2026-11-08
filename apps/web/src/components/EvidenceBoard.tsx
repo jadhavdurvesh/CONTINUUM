@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, ClipboardCheck, FlaskConical, Link2, RefreshCw, ShieldCheck, TriangleAlert } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useStable } from "../lib/hooks";
+import TrustedEvidence from "./TrustedEvidence";
 
 type Health = {
   tasks: { total: number; done: number; done_with_evidence: number; done_waived: number; done_without_requirement: number; blocked: number; in_review: number };
@@ -28,6 +29,7 @@ export default function EvidenceBoard({ projectId, userId, isOwner, onNotify, on
   const [busy, setBusy] = useState("");
   const [open, setOpen] = useState("");
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"work" | "requirements" | "trusted">("work");
   const notify = useStable(onNotify);
 
   const load = useCallback(async () => {
@@ -101,19 +103,22 @@ export default function EvidenceBoard({ projectId, userId, isOwner, onNotify, on
   const verifiedPct = taskCount ? Math.round(((health?.tasks.done_with_evidence ?? 0) / taskCount) * 100) : 0;
 
   return <div className="evidence-board">
-    <section className="panel full-panel">
-      <div className="panel-heading">
-        <div><div className="section-kicker">EVIDENCE-BASED PROGRESS</div><h2>Command center</h2><p>Progress counts only work that has passing tests and an independent human review.</p></div>
-        <button className="button secondary small" onClick={() => void load()} disabled={loading}><RefreshCw size={13}/> Refresh</button>
-      </div>
-      {health ? <div className="metric-grid evidence-metrics">
+    {health ? <div className="metric-grid evidence-metrics">
         <div className="metric-card"><div className="metric-head"><span>Verified done</span><ShieldCheck size={15}/></div><div className="metric-value">{health.tasks.done_with_evidence}<small>/{health.tasks.total}</small></div><div className="metric-note">{verifiedPct}% of all tasks have evidence</div><div className="metric-progress"><span style={{ width: verifiedPct + "%" }}/></div></div>
         <div className="metric-card"><div className="metric-head"><span>Required tests</span><FlaskConical size={15}/></div><div className="metric-value">{health.required_tests.passing}<small>/{health.required_tests.total}</small></div><div className="metric-note">{health.required_tests.failing} failing · {health.required_tests.not_run} not run</div></div>
         <div className="metric-card"><div className="metric-head"><span>Requirements verified</span><ClipboardCheck size={15}/></div><div className="metric-value">{health.requirements.verified}<small>/{health.requirements.total}</small></div><div className="metric-note">Needs linked tasks done + required tests green</div></div>
         <div className="metric-card"><div className="metric-head"><span>Done without evidence</span><TriangleAlert size={15}/></div><div className="metric-value">{health.tasks.done_waived + health.tasks.done_without_requirement}</div><div className="metric-note">{health.tasks.done_waived} owner waivers · {health.tasks.done_without_requirement} legacy</div></div>
       </div> : <p className="evidence-empty">{loading ? "Loading project health…" : "Project health is unavailable. Apply migration 202610220001 to your Supabase project."}</p>}
-    </section>
 
+    <div className="tabs-row"><div className="pm-tabs" role="tablist" aria-label="Evidence views">
+      <button role="tab" aria-selected={tab === "work"} className={tab === "work" ? "active" : ""} onClick={() => setTab("work")}>Readiness <span>{evidenceTasks.length}</span></button>
+      <button role="tab" aria-selected={tab === "requirements"} className={tab === "requirements" ? "active" : ""} onClick={() => setTab("requirements")}>Requirements <span>{requirements.length}</span></button>
+      <button role="tab" aria-selected={tab === "trusted"} className={tab === "trusted" ? "active" : ""} onClick={() => setTab("trusted")}>Trusted evidence</button>
+    </div><button className="icon-quiet" title="Refresh" aria-label="Refresh" onClick={() => void load()} disabled={loading}><RefreshCw size={16}/></button></div>
+
+    {tab === "trusted" && <TrustedEvidence projectId={projectId} userId={userId} isOwner={isOwner} onNotify={onNotify} onChanged={() => { void load(); onChanged(); }}/>}
+
+    {tab === "requirements" && 
     <section className="panel full-panel evidence-section">
       <div className="panel-heading"><div><div className="section-kicker">REQUIREMENTS</div><h2>Traceability</h2><p>Requirement → task → tests → review → completion.</p></div></div>
       <form className="evidence-inline-form" onSubmit={(event) => { event.preventDefault(); const form = event.currentTarget; void addRequirement(new FormData(form)).then(() => form.reset()); }}>
@@ -130,8 +135,9 @@ export default function EvidenceBoard({ projectId, userId, isOwner, onNotify, on
           {requirement.status === "verified" && <span className="evidence-pill ok">Verified</span>}
         </div>;
       }) : <p className="evidence-empty">No requirements yet. Add the first one above, then link tasks to it.</p>}
-    </section>
+    </section>}
 
+    {tab === "work" && 
     <section className="panel full-panel evidence-section">
       <div className="panel-heading"><div><div className="section-kicker">OPEN WORK</div><h2>Completion readiness</h2><p>The database refuses “Done” until every blocker below is cleared.</p></div></div>
       {evidenceTasks.length ? evidenceTasks.map((task) => {
@@ -140,8 +146,8 @@ export default function EvidenceBoard({ projectId, userId, isOwner, onNotify, on
         return <div className="evidence-task" key={task.id}>
           <div className="evidence-task-head">
             <div className="protected-copy"><strong>{task.title}</strong>
-              <span>{task.status.replace("_", " ")}{info?.latest_review ? " · last review: " + info.latest_review.decision.replace("_", " ") : ""}</span></div>
-            {info?.ready ? <span className="evidence-pill ok"><CheckCircle2 size={12}/> Ready</span> : <span className="evidence-pill warn">{info?.blockers?.length ?? 0} blocker(s)</span>}
+              <span><code className="short-id" title="Use this reference in a branch name or PR title so CI results attach to this task">ct-{task.id.slice(0, 8)}</code> · {task.status.replace("_", " ")}{info?.latest_review ? " · last review: " + info.latest_review.decision.replace("_", " ") : ""}</span></div>
+            {info?.ready ? <span className="evidence-pill ok"><CheckCircle2 size={12}/> Ready</span> : <span className="evidence-pill warn">{info?.blockers?.length ?? 0} {(info?.blockers?.length ?? 0) === 1 ? "blocker" : "blockers"}</span>}
             <button className="button secondary small" onClick={() => setOpen(expanded ? "" : task.id)}>{expanded ? "Close" : "Evidence"}</button>
           </div>
           {expanded && <div className="evidence-detail">
@@ -167,6 +173,6 @@ export default function EvidenceBoard({ projectId, userId, isOwner, onNotify, on
         </div>;
       }) : <p className="evidence-empty">No open tasks. Create work on the Tasks page.</p>}
       {doneTasks.length > 0 && <p className="evidence-footnote">{doneTasks.length} completed task(s) · {doneTasks.filter((task) => task.completion_waiver).length} with owner waivers.</p>}
-    </section>
+    </section>}
   </div>;
 }

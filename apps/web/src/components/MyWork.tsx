@@ -29,18 +29,15 @@ export default function MyWork({ projectId, onNotify, onNavigate }: Props) {
   const nothing = data && !data.assigned.length && !data.to_review.length && !data.defects.length && !data.decisions_to_decide.length;
 
   return <div className="evidence-board">
-    <section className="panel full-panel">
-      <div className="panel-heading"><div><div className="section-kicker">MY WORK</div><h2>What needs you</h2><p>Your tasks, the work waiting for your review, defects assigned to you{data?.decisions_to_decide.length ? ", and decisions waiting for you to decide" : ""}.</p></div>
-        <button className="button secondary small" onClick={() => void load()} disabled={loading}><RefreshCw size={13}/> Refresh</button></div>
-      {data && <div className="metric-grid evidence-metrics">
-        <div className="metric-card"><div className="metric-head"><span>Assigned to me</span><ClipboardCheck size={15}/></div><div className="metric-value">{data.assigned.length}</div><div className="metric-note">{data.counts.overdue} overdue</div></div>
-        <div className="metric-card"><div className="metric-head"><span>Waiting for my review</span><ClipboardCheck size={15}/></div><div className="metric-value">{data.to_review.length}</div></div>
-        <div className="metric-card"><div className="metric-head"><span>My open defects</span><Bug size={15}/></div><div className="metric-value">{data.defects.length}</div></div>
-        <div className="metric-card"><div className="metric-head"><span>Decisions to decide</span><Gavel size={15}/></div><div className="metric-value">{data.decisions_to_decide.length}</div></div>
-      </div>}
-      {!data && !loading && <p className="evidence-empty">Your work hub is unavailable. Apply migration 202610290001 to your Supabase project.</p>}
-      {nothing && <p className="evidence-ok">You are all caught up. Nothing is waiting on you.</p>}
-    </section>
+    <div className="board-toolbar"><span className="board-hint">Everything in this project that is waiting on you.</span><button className="icon-quiet" title="Refresh" aria-label="Refresh" onClick={() => void load()} disabled={loading}><RefreshCw size={16}/></button></div>
+    {data && <div className="metric-grid evidence-metrics">
+      <div className="metric-card"><div className="metric-head"><span>Assigned to me</span><ClipboardCheck size={15}/></div><div className="metric-value">{data.assigned.length}</div><div className="metric-note">{data.counts.overdue} overdue</div></div>
+      <div className="metric-card"><div className="metric-head"><span>Waiting for my review</span><ClipboardCheck size={15}/></div><div className="metric-value">{data.to_review.length}</div></div>
+      <div className="metric-card"><div className="metric-head"><span>My open defects</span><Bug size={15}/></div><div className="metric-value">{data.defects.length}</div></div>
+      <div className="metric-card"><div className="metric-head"><span>Decisions to decide</span><Gavel size={15}/></div><div className="metric-value">{data.decisions_to_decide.length}</div></div>
+    </div>}
+    {!data && !loading && <p className="evidence-empty">Your work hub is unavailable. Apply migration 202610290001 to your Supabase project.</p>}
+    {nothing && <p className="evidence-ok">You are all caught up. Nothing is waiting on you.</p>}
 
     {!!data?.assigned.length && <section className="panel full-panel evidence-section">
       <div className="section-kicker">ASSIGNED TO ME</div>

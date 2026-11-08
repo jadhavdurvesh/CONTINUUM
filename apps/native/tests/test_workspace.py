@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from continuum.workspace import is_automation_path, WorkspaceError, safe_file_path, should_ignore_path, read_text_file
+from continuum.workspace import is_automation_path, is_trusted_proposal, WorkspaceError, safe_file_path, should_ignore_path, read_text_file
 
 
 class WorkspaceSafetyTests(unittest.TestCase):
@@ -57,6 +57,21 @@ class AutomationPathTests(unittest.TestCase):
             self.assertTrue(is_automation_path(path), path)
         self.assertFalse(is_automation_path("docs/github.md"))
         self.assertFalse(is_automation_path("src/main.py"))
+
+
+class ProposalTrustTests(unittest.TestCase):
+    def test_server_proposals_and_my_own_are_trusted(self):
+        self.assertTrue(is_trusted_proposal({"provenance": "server", "actor_id": "someone-else"}, "me"))
+        self.assertTrue(is_trusted_proposal({"provenance": "client", "actor_id": "me"}, "me"))
+
+    def test_a_teammates_client_message_is_not_trusted(self):
+        self.assertFalse(is_trusted_proposal({"provenance": "client", "actor_id": "mallory"}, "me"))
+        self.assertFalse(is_trusted_proposal({"actor_id": "mallory"}, "me"))
+
+    def test_missing_identity_or_bad_input_is_not_trusted(self):
+        self.assertFalse(is_trusted_proposal({"provenance": "client", "actor_id": None}, None))
+        self.assertFalse(is_trusted_proposal({"provenance": "client"}, ""))
+        self.assertFalse(is_trusted_proposal("not a dict", "me"))  # type: ignore[arg-type]
 
 
 if __name__ == "__main__":

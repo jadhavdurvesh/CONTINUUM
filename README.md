@@ -46,6 +46,7 @@ supabase functions deploy invite-project-member
    - SUPABASE_URL
    - SUPABASE_PUBLISHABLE_KEY (or SUPABASE_ANON_KEY)
    - At least one model-provider key: OPENAI_API_KEY, GROQ_API_KEY, or OPENROUTER_API_KEY.
+   - SUPABASE_SERVICE_ROLE_KEY — server-only key (never in the browser or desktop apps). Enables trusted CI evidence and server-verified agent proposals.
    - CONTINUUM_DASHBOARD_ORIGIN — your dashboard origin(s), comma-separated (the hard-coded production URL was removed).
    - Optional model settings: OPENAI_MODEL, OPENAI_BASE_URL, GROQ_MODEL, OPENROUTER_MODEL.
 4. Use the stable Production URL of the Vercel deployment for the desktop release configuration.
@@ -121,3 +122,17 @@ python -m unittest discover -s tests -v
 ## License and third-party components
 
 CONTINUUM-owned source, designs, documentation and other proprietary materials are governed by the root `LICENSE`. The Theia desktop bundles separately licensed third-party packages; those licenses and notice obligations are not overridden by the root license. See [Theia third-party notices](apps/theia/THIRD_PARTY_NOTICES.md) and [the migration plan](docs/theia-migration.md). Review the exact dependency inventory before distributing a binary.
+
+
+## Trusted CI evidence (GitHub Actions)
+
+1. Apply migration `202610300001_trusted_evidence.sql` and set `SUPABASE_SERVICE_ROLE_KEY` in Vercel.
+2. In the dashboard open **Evidence → Trusted evidence**, link your GitHub repository, then **Generate webhook secret** (shown once).
+3. In GitHub: *Settings → Webhooks → Add webhook* — Payload URL `https://<your-dashboard>/api/integrations/github`, content type `application/json`, the generated secret, events **Workflow runs** and **Workflow jobs**.
+4. Attach results to a task by putting its reference in the branch name or PR title: `ct-<first 8 characters of the task id>` (shown on each task), e.g. `feature/ct-3f9a1c2b-detector`.
+5. Optionally name a test case's *CI check* exactly like the workflow job so the result lands on that test. Owners can switch the project to **CI results only**, after which manual results no longer count toward completion.
+
+
+## Dashboard design
+The dashboard uses the "Solid" design system (dark navy sidebar, one indigo accent, Inter 14 px, light and dark themes). See [docs/design-system.md](docs/design-system.md).
+`supabase/demo/seed.mjs` loads a realistic demo project for screenshots and exploration.
