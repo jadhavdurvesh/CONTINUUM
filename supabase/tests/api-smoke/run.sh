@@ -37,4 +37,5 @@ CONF
 PGRST_PID=$!
 for _ in $(seq 1 30); do curl -fs "http://127.0.0.1:$PORT/" >/dev/null 2>&1 && break; sleep 1; done
 
-WEB_DIR="$ROOT/apps/web" JWT_SECRET="$SECRET" POSTGREST_URL="http://127.0.0.1:$PORT" DATABASE_URL="$URL" timeout 120 node "$HERE/smoke.mjs"
+(cd "$ROOT/apps/web" && npx esbuild api/_lib/github.ts --bundle --platform=node --format=esm --outfile="$WORK/github.mjs" --log-level=error)
+GITHUB_MODULE="$WORK/github.mjs" WEB_DIR="$ROOT/apps/web" JWT_SECRET="$SECRET" POSTGREST_URL="http://127.0.0.1:$PORT" DATABASE_URL="$URL" timeout 120 node "$HERE/smoke.mjs"

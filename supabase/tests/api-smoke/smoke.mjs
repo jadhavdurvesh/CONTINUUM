@@ -12,11 +12,11 @@ const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
 
 const b64 = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
-function token(sub) {
-  const body = b64({ alg: "HS256", typ: "JWT" }) + "." + b64({ sub, role: "authenticated", exp: Math.floor(Date.now() / 1000) + 3600 });
+function token(sub, role = "authenticated") {
+  const body = b64({ alg: "HS256", typ: "JWT" }) + "." + b64({ ...(sub ? { sub } : {}), role, exp: Math.floor(Date.now() / 1000) + 3600 });
   return body + "." + createHmac("sha256", SECRET).update(body).digest("base64url");
 }
-const client = (sub) => new PostgrestClient(URL, { headers: { Authorization: "Bearer " + token(sub) } });
+const client = (sub, role) => new PostgrestClient(URL, { headers: { Authorization: "Bearer " + token(sub, role) } });
 let passed = 0;
 function check(condition, label) { if (!condition) { console.error("FAILED:", label); process.exitCode = 1; throw new Error(label); } passed++; }
 const ok = (result, label) => { if (process.env.TRACE) console.log("step:", label); if (result.error) { console.error("FAILED:", label, result.error.message); process.exitCode = 1; throw new Error(label); } passed++; return result.data; };
@@ -24,7 +24,7 @@ const fails = (result, pattern, label) => { check(result.error && new RegExp(pat
 
 const owner = randomUUID(), collab = randomUUID(), outsider = randomUUID();
 for (const [id, email] of [[owner, "o@x.io"], [collab, "c@x.io"], [outsider, "z@x.io"]]) await db.query("insert into auth.users(id,email) values ($1,$2)", [id, email]);
-const O = client(owner), C = client(collab), Z = client(outsider);
+const O = client(owner), C = client(collab), Z = client(outsider), S = client(null, "service_role");
 
 // --- project + membership (as the dashboard does) ---
 const project = ok(await O.from("projects").insert({ name: "Smoke", owner_id: owner }).select("id").single(), "create project").id;
@@ -124,6 +124,53 @@ check(mine.assigned.some((row) => row.id === t3), "collaborator sees the task as
 check(mine.to_review.some((row) => row.id === t3) === false, "own task is not in own review queue");
 check((await O.rpc("my_work", { p_project_id: project })).data.to_review.some((row) => row.id === t3), "owner is asked to review the collaborator's tested task");
 check((await Z.rpc("my_work", { p_project_id: project })).data === null, "outsider gets no work hub");
+
+// --- Trusted evidence: GitHub CI through the REAL webhook handler and the REAL database ---
+const { handleGithubWebhook } = await import(process.env.GITHUB_MODULE);
+ok(await O.from("repositories").insert({ project_id: project, name: "smoke", provider: "github", remote_url: "https://github.com/Acme/Smoke.git", created_by: owner }), "link repository");
+const secret = "whsec_" + "f".repeat(40);
+fails(await C.rpc("set_integration_secret", { p_project_id: project, p_provider: "github", p_secret: secret }), "owners", "collaborator cannot set the webhook secret");
+ok(await O.rpc("set_integration_secret", { p_project_id: project, p_provider: "github", p_secret: secret }), "owner sets the webhook secret");
+const integ = ok(await O.rpc("integration_status", { p_project_id: project }), "integration status");
+check(integ.github.configured === true && !JSON.stringify(integ).includes(secret), "status shows configured and never leaks the secret");
+check((await O.from("integration_secrets").select("*")).error !== null, "clients cannot read the secrets table");
+fails(await O.rpc("ci_lookup", { p_provider: "github", p_repo: "acme/smoke" }), "permission denied", "members cannot call ci_lookup");
+fails(await O.rpc("record_ci_run", { p_project_id: project, p_check_name: "x", p_conclusion: "success", p_commit_sha: "a", p_external_id: "z", p_url: null, p_refs: [], p_started_at: null, p_finished_at: null, p_summary: "x" }), "permission denied", "members cannot record CI evidence");
+
+const webhookDeps = {
+  lookup: async (repo) => ok(await S.rpc("ci_lookup", { p_provider: "github", p_repo: repo }), "service ci_lookup"),
+  record: async (projectId, r) => ok(await S.rpc("record_ci_run", { p_project_id: projectId, p_check_name: r.checkName, p_conclusion: r.conclusion, p_commit_sha: r.commitSha,
+    p_external_id: r.externalId, p_url: r.url || null, p_refs: r.refs, p_started_at: r.startedAt, p_finished_at: r.finishedAt, p_summary: r.summary }), "service record_ci_run")
+};
+const hook = (payload, key = secret, event = "workflow_job") => { const raw = Buffer.from(JSON.stringify(payload));
+  return handleGithubWebhook({ event, signature: "sha256=" + createHmac("sha256", key).update(raw).digest("hex"), rawBody: raw }, webhookDeps); };
+const job = (id, conclusion) => ({ action: "completed", repository: { full_name: "Acme/Smoke" }, workflow_job: { id, run_attempt: 1, name: "unit-tests", workflow_name: "validate", conclusion, head_sha: "c".repeat(40), head_branch: "feature/ct-" + t3.slice(0, 8) + "-bridge", html_url: "https://github.com/Acme/Smoke/actions/runs/1", started_at: new Date(Date.now() - 5000).toISOString(), completed_at: new Date().toISOString() } });
+
+check((await hook(job(501, "success"), "wrong-secret-wrong-secret-wrong-secret")).status === 401, "forged webhook is rejected");
+check((await hook({ ...job(501, "success"), repository: { full_name: "Evil/Repo" } })).status === 401, "unknown repository is rejected");
+let delivered = await hook(job(501, "success"));
+check(delivered.status === 200 && delivered.body.recorded === 1, "signed CI result recorded");
+check((await hook(job(501, "success"))).body.recorded === 0, "redelivery does not duplicate evidence");
+const ciRuns = ok(await O.from("test_runs").select("actor_type,executed_by,source,result,task_id,commit_sha,url").eq("project_id", project).eq("source", "github-actions"), "members can read CI evidence");
+check(ciRuns.length === 1 && ciRuns[0].actor_type === "system" && ciRuns[0].executed_by === null && ciRuns[0].task_id === t3 && ciRuns[0].result === "passed", "CI evidence is system-authored and attached to the referenced task");
+
+// The strict policy: only that trusted evidence counts.
+check((await C.from("projects").update({ evidence_policy: "ci_only" }).eq("id", project)).error === null, "collaborator's policy change is silently ignored by RLS");
+check(ok(await O.from("projects").select("evidence_policy").eq("id", project).single(), "read policy").evidence_policy === "any", "collaborator cannot change the policy");
+ok(await O.from("projects").update({ evidence_policy: "ci_only" }).eq("id", project), "owner enables ci_only");
+check(ok(await O.rpc("project_health", { p_project_id: project }), "health").evidence_policy === "ci_only", "health reports ci_only");
+// t3 had a LOCAL passing run earlier; now a failing CI result must win and block completion
+check((await hook(job(502, "failure"))).body.recorded === 1, "failing CI result recorded");
+const strict = ok(await O.rpc("task_completion_status", { p_task_id: t3 }), "strict status");
+check(strict.ready === false && strict.blockers.some((b) => /latest test run is "failed"/.test(b)), "latest trusted result (failed) blocks completion");
+check(!ok(await O.rpc("my_work", { p_project_id: project }), "my_work strict").to_review.some((row) => row.id === t3), "a task with failing CI is not offered for review");
+
+// Forged agent proposals
+const forged = await C.from("agent_messages").insert({ project_id: project, session_id: sess, role: "assistant", actor_type: "agent", actor_id: collab, content: "{}", provenance: "server" });
+check(forged.error && /row-level security/i.test(forged.error.message), "a member cannot create a server-provenance message");
+ok(await C.from("agent_messages").insert({ project_id: project, session_id: sess, role: "assistant", actor_type: "agent", actor_id: collab, content: "{}" }), "a member can still post a client message (untrusted by apply flows)");
+const msgs = ok(await O.from("agent_messages").select("actor_id,provenance").eq("session_id", sess), "read messages");
+check(msgs.some((m) => m.actor_id === collab && m.provenance === "client"), "forged message is attributed to its author with client provenance");
 
 console.log("API SMOKE TEST PASSED (" + passed + " checks)");
 await db.end();

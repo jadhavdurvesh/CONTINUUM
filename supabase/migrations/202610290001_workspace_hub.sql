@@ -88,14 +88,14 @@ begin
           from public.tasks t
          where t.project_id = p_project_id and t.assigned_to = me and t.status <> 'done'
          order by t.due_date nulls last, t.updated_at desc limit 50) x), '[]'::jsonb),
-    -- Work waiting for a reviewer: someone else's open task with a passing test run and no review from me since that run.
+    -- Work waiting for a reviewer: someone else's open task whose latest test run passed and that I have not reviewed since that run.
     -- (Based on evidence, not on the task's status field, which people do not always keep current.)
     'to_review', coalesce((select jsonb_agg(to_jsonb(x) order by x.updated_at desc) from (
         select t.id, t.title, t.status, t.updated_at
           from public.tasks t
          where t.project_id = p_project_id and t.status <> 'done'
            and t.assigned_to is distinct from me
-           and exists (select 1 from public.test_runs r where r.task_id = t.id and r.project_id = p_project_id and r.result = 'passed')
+           and (select r.result from public.test_runs r where r.task_id = t.id and r.project_id = p_project_id order by r.created_at desc, r.id desc limit 1) = 'passed'
            and not exists (select 1 from public.task_reviews v where v.task_id = t.id and v.reviewer_id = me
                            and v.created_at >= coalesce((select max(r2.created_at) from public.test_runs r2 where r2.task_id = t.id), 'epoch'::timestamptz))
          order by t.updated_at desc limit 50) x), '[]'::jsonb),
